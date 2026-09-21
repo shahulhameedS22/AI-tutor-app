@@ -1,0 +1,184 @@
+/**
+ * Core Philosophy: This ruleset enforces a strict user-ownership model. All user-generated
+ * data, including study plans and progress reports, is stored in subcollections under that
+ * user's unique document. This ensures that users can only ever access their own data.
+ *
+ * Data Structure: Data is organized hierarchically, starting with a top-level `/users`
+ * collection. Each user's data is nested under `/users/{userId}`, creating a private data
+ * tree for each user. This includes `/users/{userId}/studyPlans` and the further nested
+ * `/users/{userId}/studyPlans/{studyPlanId}/progressReports`.
+ *
+ * Key Security Decisions:
+ * - Default Deny: All access is denied by default. Rules are written to explicitly grant
+ *   the minimum necessary permissions.
+ * - Strict Ownership: Access to any document within a user's data tree (`/users/{userId}/**`)
+ *   is strictly limited to the authenticated user whose UID matches the `{userId}` in the path.
+ * - No User Listing: Listing documents from the root `/users` collection is explicitly forbidden
+ *   to prevent user enumeration and protect user privacy.
+ * - Path-Based Security: The rules rely on the document path for authorization, which is highly
+ *   performant as it avoids extra database reads (`get()` calls).
+ * - Relational Integrity: On document creation, rules validate that key identifiers within the
+ *   document's data (e.g., `userId`) match the IDs in the path. On updates, these key
+ *   identifiers are enforced as immutable to prevent re-linking documents.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Checks if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the currently authenticated user's ID matches the provided userId.
+     * This is the primary function for enforcing data ownership.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if a document exists and if the requester is the owner.
+     * Used for safe update and delete operations.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Validates the integrity of a new User profile document.
+     * Ensures the document's internal `id` matches the document's path ID.
+     */
+    function userProfileIsValidOnCreate(userId) {
+      return request.resource.data.id == userId;
+    }
+
+    /**
+     * Enforces immutability of the User profile's `id` field during an update.
+     */
+    function userProfileIsValidOnUpdate() {
+      return request.resource.data.id == resource.data.id;
+    }
+
+    /**
+     * Validates the integrity of a new Study Plan document.
+     * Ensures the plan's internal `userId` matches the owner's ID from the path.
+     */
+    function studyPlanIsValidOnCreate(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    /**
+     * Enforces immutability of the Study Plan's `userId` field during an update.
+     */
+    function studyPlanIsValidOnUpdate() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    /**
+     * Validates the integrity of a new Progress Report document.
+     * Ensures the report's internal `userId` and `studyPlanId` match the IDs from the path.
+     */
+    function progressReportIsValidOnCreate(userId, studyPlanId) {
+      return request.resource.data.userId == userId
+          && request.resource.data.studyPlanId == studyPlanId;
+    }
+
+    /**
+     * Enforces immutability of the Progress Report's `userId` and `studyPlanId` fields.
+     */
+    function progressReportIsValidOnUpdate() {
+      return request.resource.data.userId == resource.data.userId
+          && request.resource.data.studyPlanId == resource.data.studyPlanId;
+    }
+
+    /**
+     * Validates the integrity of a new CryptographyChatMessage document.
+     * Ensures the message's internal `userId` matches the owner's ID from the path.
+     */
+    function cryptographyMessageIsValidOnCreate(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    /**
+     * Enforces immutability of the CryptographyChatMessage's `userId` field during an update.
+     */
+    function cryptographyMessageIsValidOnUpdate() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Manages user profile documents.
+     * @path /users/{userId}
+     * @allow (get, update, delete) A logged-in user (auth.uid='user123') can access their own document at /users/user123.
+     * @allow (create) A new user (auth.uid='user123') can create their profile document at /users/user123.
+     * @deny (list) No user can list all documents in the /users collection.
+     * @deny (get) A user (auth.uid='user123') cannot access another user's document at /users/user456.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && userProfileIsValidOnCreate(userId);
+      allow update: if isExistingOwner(userId) && userProfileIsValidOnUpdate();
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Manages a user's private study plans.
+       * @path /users/{userId}/studyPlans/{studyPlanId}
+       * @allow (get, list, create, update, delete) A logged-in user (auth.uid='user123') can perform any operation on documents under /users/user123/studyPlans.
+       * @deny (get) A user (auth.uid='user456') cannot access a study plan at /users/user123/studyPlans/planABC.
+       * @principle Enforces document ownership via path hierarchy for all operations.
+       */
+      match /studyPlans/{studyPlanId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && studyPlanIsValidOnCreate(userId);
+        allow update: if isExistingOwner(userId) && studyPlanIsValidOnUpdate();
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description Manages progress reports for a specific study plan.
+         * @path /users/{userId}/studyPlans/{studyPlanId}/progressReports/{progressReportId}
+         * @allow (get, list, create, update, delete) A logged-in user (auth.uid='user123') can manage reports under their own study plan path.
+         * @deny (list) A user (auth.uid='user456') cannot list reports at /users/user123/studyPlans/planABC/progressReports.
+         * @principle Inherits ownership from the parent path, ensuring only the owner of the user profile can access deeply nested data.
+         */
+        match /progressReports/{progressReportId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && progressReportIsValidOnCreate(userId, studyPlanId);
+          allow update: if isExistingOwner(userId) && progressReportIsValidOnUpdate();
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+      
+      /**
+       * @description Manages a user's private cryptography chat history.
+       * @path /users/{userId}/cryptographyChatHistory/{messageId}
+       * @allow (get, list, create, update, delete) A logged-in user (auth.uid='user123') can perform any operation on documents under /users/user123/cryptographyChatHistory.
+       * @deny (get) A user (auth.uid='user456') cannot access a chat message at /users/user123/cryptographyChatHistory/messageABC.
+       * @principle Enforces document ownership via path hierarchy for all operations.
+       */
+      match /cryptographyChatHistory/{messageId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && cryptographyMessageIsValidOnCreate(userId);
+        allow update: if isExistingOwner(userId) && cryptographyMessageIsValidOnUpdate();
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+  }
+}

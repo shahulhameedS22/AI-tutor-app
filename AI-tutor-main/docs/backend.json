@@ -1,0 +1,239 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the AI Study Buddy application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "createdAt"
+      ]
+    },
+    "StudyPlan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "StudyPlan",
+      "type": "object",
+      "description": "Represents a study plan tailored to a specific user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the study plan."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns this study plan. (Relationship: User 1:N StudyPlan)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the study plan."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the study plan."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the study plan was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "createdAt"
+      ]
+    },
+    "ProgressReport": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ProgressReport",
+      "type": "object",
+      "description": "Represents a report on a user's learning progress.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the progress report."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User this progress report belongs to. (Relationship: User 1:N ProgressReport)"
+        },
+        "studyPlanId": {
+          "type": "string",
+          "description": "Reference to the StudyPlan this progress report is associated with. (Relationship: StudyPlan 1:N ProgressReport)"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the progress report.",
+          "format": "date-time"
+        },
+        "score": {
+          "type": "number",
+          "description": "Score achieved by the user in a particular session."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "studyPlanId",
+        "date",
+        "score"
+      ]
+    },
+    "CryptographyChatMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CryptographyChatMessage",
+      "type": "object",
+      "description": "Represents a single message in the cryptography chatbot conversation.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the chat message."
+        },
+        "userId": {
+          "type": "string",
+          "description": "ID of the user who sent or received the message."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "model"
+          ],
+          "description": "The role of the message sender."
+        },
+        "content": {
+          "type": "string",
+          "description": "The content of the message."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp indicating when the message was created."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "role",
+        "content",
+        "createdAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. The document ID is the User ID. Authentication is handled through Firebase Authentication, and the userId is obtained from request.auth.uid.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, derived from Firebase Authentication (request.auth.uid)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/studyPlans/{studyPlanId}",
+        "definition": {
+          "entityName": "StudyPlan",
+          "schema": {
+            "$ref": "#/backend/entities/StudyPlan"
+          },
+          "description": "Stores study plans owned by a specific user. Enforces ownership using path-based access control. Only the authenticated user can access their own study plans.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, derived from Firebase Authentication (request.auth.uid)."
+            },
+            {
+              "name": "studyPlanId",
+              "description": "The unique identifier for the study plan."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/studyPlans/{studyPlanId}/progressReports/{progressReportId}",
+        "definition": {
+          "entityName": "ProgressReport",
+          "schema": {
+            "$ref": "#/backend/entities/ProgressReport"
+          },
+          "description": "Stores progress reports associated with a particular study plan. Nesting maintains a clear hierarchy and simplifies access control rules. Path-based ownership ensures only the associated user can access the reports.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, derived from Firebase Authentication (request.auth.uid)."
+            },
+            {
+              "name": "studyPlanId",
+              "description": "The unique identifier for the study plan."
+            },
+            {
+              "name": "progressReportId",
+              "description": "The unique identifier for the progress report."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/cryptographyChatHistory/{messageId}",
+        "definition": {
+          "entityName": "CryptographyChatMessage",
+          "schema": {
+            "$ref": "#/backend/entities/CryptographyChatMessage"
+          },
+          "description": "Stores the chat history for the cryptography chatbot for a specific user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "messageId",
+              "description": "The unique identifier for the chat message."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to support user authentication and the core entities of the AI Study Buddy application (Users, StudyPlans, and ProgressReports). It leverages path-based ownership for user-related data to ensure secure and efficient access control. Authorization independence is achieved through path-based ownership, eliminating the need for `get()` calls in security rules and enabling atomic operations.\n\n*   `/users/{userId}`: Stores user profiles. This collection uses the User ID as the document ID, enabling straightforward user data retrieval and updates. Authentication is handled through Firebase Authentication, and the `userId` is obtained from `request.auth.uid`.\n*   `/users/{userId}/studyPlans/{studyPlanId}`: Stores study plans owned by a specific user. This structure enforces ownership by placing study plans as subcollections under the respective user documents. The `userId` parameter ensures that only the authenticated user can access their own study plans.\n*   `/users/{userId}/studyPlans/{studyPlanId}/progressReports/{progressReportId}`: Stores progress reports associated with a particular study plan. Nesting progress reports under study plans and users maintains a clear hierarchy and simplifies access control rules. Again, path-based ownership ensures only the user associated with the study plan can access the progress reports.\n*   `/users/{userId}/cryptographyChatHistory/{messageId}`: Stores individual chat messages for the cryptography tutor feature. Nesting under the user ensures that a user can only access their own chat history, enforcing privacy and security.\n\nThis structure facilitates secure `list` operations because access to each collection is controlled by the `userId` in the path. A user can only list study plans and progress reports associated with their own user ID, preventing unauthorized access to other users' data."
+  }
+}
