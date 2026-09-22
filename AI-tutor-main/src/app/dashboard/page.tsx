@@ -31,8 +31,8 @@ export default function DashboardPage() {
               Hi, {userName} 👋
             </h1>
 
-            <p className="mt-2 text-muted-foreground">
-              Choose a feature to continue learning.
+            <p className="mt-2 text-muted-foreground text-center">
+              Ready to level up your learning? 🚀 Learn at your own pace with your AI Tutor, practice with personalized questions, discover your strengths, and improve the areas that need more attention. Choose a feature below and take the next step toward smarter, more confident learning. 🎯
             </p>
           </div>
 
