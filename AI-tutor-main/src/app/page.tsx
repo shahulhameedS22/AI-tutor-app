@@ -54,7 +54,7 @@ export default function Home() {
                 <Link href="/signup">Start Your Free Trial</Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link href="/about">Learn More</Link>
+                <Link href="#why-choose-us">Learn More</Link>
               </Button>
             </div>
           </div>
@@ -72,7 +72,7 @@ export default function Home() {
           )}
         </section>
 
-        <section className="bg-muted py-20 md:py-24">
+        <section id="why-choose-us" className="bg-muted py-20 md:py-24">
           <div className="container">
             <div className="text-center space-y-4 mb-12">
               <h2 className="font-headline text-3xl md:text-4xl font-bold">Why Choose AI Study Buddy?</h2>
