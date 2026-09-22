@@ -9,25 +9,25 @@
     {
       "id": "personalized-learning",
       "description": "A student looking at a tablet with a personalized study path visualized on screen.",
-      "imageUrl": "https://images.unsplash.com/photo-1511629091441-ee46146481b6?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "imageUrl": "https://images.unsplash.com/photo-1662634935564-864958a80647?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxlZHVjYXRpb24lMjB0YWJsZXR8ZW58MHx8fHwxNzY4ODE4NDA1fDA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "education tablet"
     },
     {
       "id": "adaptive-questions",
       "description": "An abstract illustration of a brain with glowing nodes and question marks.",
-      "imageUrl": "https://images.unsplash.com/photo-1511629091441-ee46146481b6?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "imageUrl": "https://images.unsplash.com/photo-1721637990437-36b77376cfe9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxhYnN0cmFjdCUyMGJyYWlufGVufDB8fHx8MTc2ODgxODQwNXww&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "abstract brain"
     },
     {
       "id": "progress-tracking",
       "description": "A dashboard on a computer screen showing student progress with charts and graphs.",
-      "imageUrl": "https://images.unsplash.com/photo-1511629091441-ee46146481b6?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "imageUrl": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxkYXNoYm9hcmQlMjBjaGFydHxlbnwwfHx8fDE3Njg3MzM3ODV8MA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "dashboard chart"
     },
     {
       "id": "interactive-lessons",
       "description": "A person interacting with a floating futuristic UI for an interactive lesson.",
-      "imageUrl": "https://images.unsplash.com/photo-1511629091441-ee46146481b6?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "imageUrl": "https://images.unsplash.com/photo-1766241632392-1c84994a5e62?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxpbnRlcmFjdGl2ZSUyMHVpfGVufDB8fHx8MTc2ODgxODQwNXww&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "interactive ui"
     }
   ]
