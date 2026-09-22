@@ -53,8 +53,8 @@ export default function Home() {
               <Button size="lg" asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <Link href="/signup">Start Your Free Trial</Link>
               </Button>
-              <Button size="lg" variant="outline">
-                Learn More
+              <Button size="lg" variant="outline" asChild>
+                <Link href="/about">Learn More</Link>
               </Button>
             </div>
           </div>
