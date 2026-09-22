@@ -27,7 +27,7 @@ export default function DashboardPage() {
 
           {/* Welcome section */}
           <div className="mb-10">
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-3xl font-bold tracking-tight text-center">
               Hi, {userName} 👋
             </h1>
 
