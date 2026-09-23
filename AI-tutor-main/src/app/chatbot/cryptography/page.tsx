@@ -64,60 +64,124 @@ export default function CryptographyChatbotPage() {
   }
 
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!user) return;
+ async function onSubmit(values: z.infer<typeof formSchema>) {
+  if (!user) return;
 
-    setIsLoading(true);
-    form.reset();
+  setIsLoading(true);
+  form.reset();
 
-    const userMessage: Omit<Message, 'id'> = {
-      role: 'user',
-      content: values.question,
+  const question = values.question.trim();
+
+  const chatHistoryCollectionRef = collection(
+    firestore,
+    'users',
+    user.uid,
+    'cryptographyChatHistory'
+  );
+
+  // Save user message
+  const userMessageRef = doc(chatHistoryCollectionRef);
+
+  const userMessage: Message = {
+    role: 'user',
+    content: question,
+  };
+
+  setDocumentNonBlocking(
+    userMessageRef,
+    {
+      id: userMessageRef.id,
+      ...userMessage,
+      userId: user.uid,
+      createdAt: new Date().toISOString(),
+    },
+    {}
+  );
+
+  // Show user message immediately
+  setMessages((prev) => [...prev, userMessage]);
+
+  // --------------------------------------------------
+  // HANDLE GREETINGS DIRECTLY
+  // --------------------------------------------------
+
+  const greetingPattern =
+    /^(hi|hii|hiii|hello|hey|heyy|hai|good morning|good afternoon|good evening)[!. ]*$/i;
+
+  if (greetingPattern.test(question)) {
+    const welcomeMessage: Message = {
+      role: 'model',
+      content:
+        'Hello! 👋 Welcome to the Cryptography Tutor. How can I help you today?',
     };
-    
-    const chatHistoryCollectionRef = collection(firestore, 'users', user.uid, 'cryptographyChatHistory');
-    
-    const userMessageRef = doc(chatHistoryCollectionRef);
-    setDocumentNonBlocking(userMessageRef, {
-        id: userMessageRef.id,
-        ...userMessage,
+
+    const welcomeMessageRef = doc(chatHistoryCollectionRef);
+
+    setDocumentNonBlocking(
+      welcomeMessageRef,
+      {
+        id: welcomeMessageRef.id,
+        ...welcomeMessage,
         userId: user.uid,
         createdAt: new Date().toISOString(),
-    }, {});
-    
-    const historyForAI = [...messages, userMessage].map(msg => ({ role: msg.role, content: msg.content }));
+      },
+      {}
+    );
 
-    try {
-      const result = await cryptographyChatbot({
-        history: historyForAI.slice(0, -1),
-        question: values.question,
-      });
-      
-      const modelMessage: Omit<Message, 'id'> = {
-        role: 'model',
-        content: result.response,
-      };
-      
-      const modelMessageRef = doc(chatHistoryCollectionRef);
-      setDocumentNonBlocking(modelMessageRef, {
+    setMessages((prev) => [...prev, welcomeMessage]);
+
+    setIsLoading(false);
+    return;
+  }
+
+  // --------------------------------------------------
+  // SEND NORMAL QUESTIONS TO THE EXISTING AI
+  // --------------------------------------------------
+
+  const historyForAI = [...messages, userMessage].map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+  }));
+
+  try {
+    const result = await cryptographyChatbot({
+      history: historyForAI.slice(0, -1),
+      question: question,
+    });
+
+    const modelMessage: Message = {
+      role: 'model',
+      content: result.response,
+    };
+
+    const modelMessageRef = doc(chatHistoryCollectionRef);
+
+    setDocumentNonBlocking(
+      modelMessageRef,
+      {
         id: modelMessageRef.id,
         ...modelMessage,
         userId: user.uid,
         createdAt: new Date().toISOString(),
-      }, {});
+      },
+      {}
+    );
 
-    } catch (error) {
-      console.error('Chatbot error:', error);
-      const errorMessage: Message = {
-        role: 'model',
-        content: 'Sorry, I encountered an error. Please try again.',
-      };
-      setMessages(prevMessages => [...prevMessages, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+    setMessages((prev) => [...prev, modelMessage]);
+
+  } catch (error) {
+    console.error('Chatbot error:', error);
+
+    const errorMessage: Message = {
+      role: 'model',
+      content: 'Sorry, I encountered an error. Please try again.',
+    };
+
+    setMessages((prev) => [...prev, errorMessage]);
+  } finally {
+    setIsLoading(false);
   }
-
+}
   const getInitials = (name?: string | null) => {
     if (!name) return 'U';
     const names = name.split(' ');
