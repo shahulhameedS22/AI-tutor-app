@@ -2,22 +2,12 @@
 
 import { z } from 'zod';
 
-
-/* =========================================================
-   TYPES
-========================================================= */
-
 type Question = {
   id: number;
   question: string;
   options: Record<string, string>;
   answer: string;
 };
-
-
-/* =========================================================
-   INPUT
-========================================================= */
 
 const quizInputSchema = z.object({
   num: z
@@ -31,16 +21,11 @@ const quizInputSchema = z.object({
     .default([]),
 });
 
-
-/* =========================================================
-   QUESTION BANK
-========================================================= */
-
 const QUESTION_BANK: Question[] = [
-
   {
     id: 1,
-    question: 'What does 5G primarily improve compared with previous mobile generations?',
+    question:
+      'What does 5G primarily improve compared with previous mobile generations?',
     options: {
       A: 'Only screen resolution',
       B: 'Speed, latency and connection capacity',
@@ -52,7 +37,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 2,
-    question: 'What does Gbps stand for?',
+    question:
+      'What does Gbps stand for?',
     options: {
       A: 'Gigabytes per second',
       B: 'Gigabits per second',
@@ -64,7 +50,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 3,
-    question: 'What is network slicing in 5G?',
+    question:
+      'What is network slicing in 5G?',
     options: {
       A: 'Splitting a phone screen',
       B: 'Creating logical virtual networks on shared infrastructure',
@@ -76,19 +63,21 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 4,
-    question: 'Which organization develops the major specifications used for 5G NR?',
+    question:
+      'Which organization develops the major specifications used for 5G NR?',
     options: {
       A: '3GPP',
       B: 'W3C',
-      C: 'IEEE Computer Society only',
-      D: 'ICANN',
+      C: 'ICANN',
+      D: 'IETF only',
     },
     answer: 'A',
   },
 
   {
     id: 5,
-    question: 'What does NR mean in 5G NR?',
+    question:
+      'What does NR mean in 5G NR?',
     options: {
       A: 'Network Router',
       B: 'New Radio',
@@ -100,7 +89,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 6,
-    question: 'What is a major characteristic of mmWave 5G?',
+    question:
+      'What is a major characteristic of mmWave 5G?',
     options: {
       A: 'Very low frequency',
       B: 'High frequency and high bandwidth potential',
@@ -112,7 +102,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 7,
-    question: 'What does MIMO use to improve wireless communication?',
+    question:
+      'What does MIMO use to improve wireless communication?',
     options: {
       A: 'Multiple antennas',
       B: 'Multiple SIM cards',
@@ -124,7 +115,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 8,
-    question: 'What is massive MIMO?',
+    question:
+      'What is massive MIMO?',
     options: {
       A: 'A storage technology',
       B: 'A system using many antenna elements',
@@ -136,7 +128,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 9,
-    question: 'What is beamforming used for?',
+    question:
+      'What is beamforming used for?',
     options: {
       A: 'Directing radio energy toward intended users',
       B: 'Compressing videos',
@@ -148,7 +141,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 10,
-    question: 'What is edge computing?',
+    question:
+      'What is edge computing?',
     options: {
       A: 'Processing data closer to where it is generated',
       B: 'Processing only inside a smartphone',
@@ -160,7 +154,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 11,
-    question: 'Which 5G service category targets very high reliability and very low latency?',
+    question:
+      'Which 5G service category targets very high reliability and very low latency?',
     options: {
       A: 'eMBB',
       B: 'URLLC',
@@ -172,7 +167,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 12,
-    question: 'What does eMBB focus on?',
+    question:
+      'What does eMBB focus on?',
     options: {
       A: 'Enhanced mobile broadband',
       B: 'Emergency battery backup',
@@ -184,7 +180,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 13,
-    question: 'What does mMTC focus on?',
+    question:
+      'What does mMTC focus on?',
     options: {
       A: 'Massive machine-type communications',
       B: 'Mobile media compression',
@@ -196,7 +193,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 14,
-    question: 'What is 5G standalone mode?',
+    question:
+      'What is 5G standalone mode?',
     options: {
       A: '5G operating with a 5G core network',
       B: '5G without a base station',
@@ -208,7 +206,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 15,
-    question: 'What does NSA mean in 5G deployment?',
+    question:
+      'What does NSA mean in 5G deployment?',
     options: {
       A: 'New Signal Architecture',
       B: 'Non-Standalone',
@@ -220,7 +219,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 16,
-    question: 'What is a gNB in 5G?',
+    question:
+      'What is a gNB in 5G?',
     options: {
       A: 'A 5G radio base station',
       B: 'A type of SIM card',
@@ -232,7 +232,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 17,
-    question: 'What is the 5G core commonly called?',
+    question:
+      'What is the 5G core commonly called?',
     options: {
       A: '5GC',
       B: '5GD',
@@ -244,7 +245,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 18,
-    question: 'What is latency?',
+    question:
+      'What is latency?',
     options: {
       A: 'The delay before data reaches its destination',
       B: 'The total storage capacity',
@@ -256,7 +258,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 19,
-    question: 'What is throughput?',
+    question:
+      'What is throughput?',
     options: {
       A: 'The amount of data successfully transferred over time',
       B: 'The physical size of a router',
@@ -268,7 +271,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 20,
-    question: 'What does bandwidth represent in networking?',
+    question:
+      'What does bandwidth represent in networking?',
     options: {
       A: 'The range or capacity available for communication',
       B: 'The physical weight of a cable',
@@ -280,7 +284,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 21,
-    question: 'What is carrier aggregation?',
+    question:
+      'What is carrier aggregation?',
     options: {
       A: 'Combining multiple carriers to increase available bandwidth',
       B: 'Combining multiple passwords',
@@ -292,7 +297,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 22,
-    question: 'What does QoS stand for?',
+    question:
+      'What does QoS stand for?',
     options: {
       A: 'Quality of Service',
       B: 'Quantity of Storage',
@@ -304,7 +310,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 23,
-    question: 'What is a small cell mainly used for?',
+    question:
+      'What is a small cell mainly used for?',
     options: {
       A: 'Improving coverage and capacity in localized areas',
       B: 'Replacing every data center',
@@ -316,7 +323,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 24,
-    question: 'What is a macrocell?',
+    question:
+      'What is a macrocell?',
     options: {
       A: 'A large-area cellular base station',
       B: 'A tiny computer processor',
@@ -328,7 +336,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 25,
-    question: 'What is FDD?',
+    question:
+      'What is FDD?',
     options: {
       A: 'Frequency Division Duplex',
       B: 'Fast Data Delivery',
@@ -340,7 +349,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 26,
-    question: 'What is TDD?',
+    question:
+      'What is TDD?',
     options: {
       A: 'Time Division Duplex',
       B: 'Transmission Data Directory',
@@ -352,7 +362,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 27,
-    question: 'What is a handover in a cellular network?',
+    question:
+      'What is a handover in a cellular network?',
     options: {
       A: 'Moving an active connection from one cell to another',
       B: 'Changing a phone password',
@@ -364,7 +375,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 28,
-    question: 'What is SDN?',
+    question:
+      'What is SDN?',
     options: {
       A: 'Software-Defined Networking',
       B: 'Secure Digital Network',
@@ -376,7 +388,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 29,
-    question: 'What is NFV?',
+    question:
+      'What is NFV?',
     options: {
       A: 'Network Functions Virtualization',
       B: 'Network File Verification',
@@ -388,7 +401,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 30,
-    question: 'What is MEC?',
+    question:
+      'What is MEC?',
     options: {
       A: 'Multi-access Edge Computing',
       B: 'Mobile Encryption Control',
@@ -400,7 +414,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 31,
-    question: 'What does IoT stand for?',
+    question:
+      'What does IoT stand for?',
     options: {
       A: 'Internet of Things',
       B: 'Internet of Terminals',
@@ -412,7 +427,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 32,
-    question: 'What is VoNR?',
+    question:
+      'What is VoNR?',
     options: {
       A: 'Voice over New Radio',
       B: 'Video over Network Router',
@@ -424,7 +440,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 33,
-    question: 'What is IPv6 address length?',
+    question:
+      'What is the IPv6 address length?',
     options: {
       A: '32 bits',
       B: '64 bits',
@@ -436,7 +453,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 34,
-    question: 'Which protocol provides reliable, connection-oriented data delivery?',
+    question:
+      'Which protocol provides reliable, connection-oriented data delivery?',
     options: {
       A: 'UDP',
       B: 'TCP',
@@ -448,7 +466,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 35,
-    question: 'Which protocol is connectionless?',
+    question:
+      'Which protocol is connectionless?',
     options: {
       A: 'TCP',
       B: 'UDP',
@@ -460,7 +479,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 36,
-    question: 'What is DNS primarily used for?',
+    question:
+      'What is DNS primarily used for?',
     options: {
       A: 'Converting domain names into IP addresses',
       B: 'Encrypting hard drives',
@@ -472,7 +492,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 37,
-    question: 'What does DHCP provide to network clients?',
+    question:
+      'What does DHCP provide to network clients?',
     options: {
       A: 'IP configuration',
       B: 'Encryption keys only',
@@ -484,7 +505,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 38,
-    question: 'What is NAT used for?',
+    question:
+      'What is NAT used for?',
     options: {
       A: 'Translating between private and public IP addressing',
       B: 'Encrypting passwords',
@@ -496,7 +518,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 39,
-    question: 'What does a router primarily do?',
+    question:
+      'What does a router primarily do?',
     options: {
       A: 'Forward packets between networks',
       B: 'Store passwords',
@@ -508,7 +531,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 40,
-    question: 'What does a network switch primarily use to forward Ethernet frames?',
+    question:
+      'What does a network switch primarily use to forward Ethernet frames?',
     options: {
       A: 'MAC addresses',
       B: 'Domain names',
@@ -520,7 +544,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 41,
-    question: 'What is ARP used for in IPv4 networks?',
+    question:
+      'What is ARP used for in IPv4 networks?',
     options: {
       A: 'Mapping an IPv4 address to a MAC address',
       B: 'Mapping a password to a username',
@@ -532,7 +557,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 42,
-    question: 'Which device normally separates different IP networks?',
+    question:
+      'Which device normally separates different IP networks?',
     options: {
       A: 'Router',
       B: 'Hub',
@@ -544,19 +570,21 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 43,
-    question: 'What does HTTPS use to protect web communication?',
+    question:
+      'What does HTTPS use to protect web communication?',
     options: {
       A: 'TLS',
       B: 'ARP',
       C: 'DHCP',
-      D: 'ICMP only',
+      D: 'ICMP',
     },
     answer: 'A',
   },
 
   {
     id: 44,
-    question: 'What is TLS primarily designed to provide?',
+    question:
+      'What is TLS primarily designed to provide?',
     options: {
       A: 'Secure communication over a network',
       B: 'Faster CPU execution',
@@ -568,7 +596,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 45,
-    question: 'What is authentication?',
+    question:
+      'What is authentication?',
     options: {
       A: 'Verifying an identity',
       B: 'Compressing a file',
@@ -580,7 +609,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 46,
-    question: 'What does encryption primarily provide?',
+    question:
+      'What does encryption primarily provide?',
     options: {
       A: 'Confidentiality of information',
       B: 'Higher screen brightness',
@@ -592,7 +622,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 47,
-    question: 'What does a cryptographic hash function produce?',
+    question:
+      'What does a cryptographic hash function produce?',
     options: {
       A: 'A fixed-size digest',
       B: 'A physical network cable',
@@ -604,7 +635,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 48,
-    question: 'What is SHA-256?',
+    question:
+      'What is SHA-256?',
     options: {
       A: 'A cryptographic hash function producing a 256-bit digest',
       B: 'A routing protocol',
@@ -616,7 +648,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 49,
-    question: 'What is a digital signature primarily used for?',
+    question:
+      'What is a digital signature primarily used for?',
     options: {
       A: 'Authenticity and integrity verification',
       B: 'Increasing network speed',
@@ -628,19 +661,21 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 50,
-    question: 'Which encryption type uses the same secret key for encryption and decryption?',
+    question:
+      'Which encryption type uses the same secret key for encryption and decryption?',
     options: {
       A: 'Symmetric encryption',
       B: 'Asymmetric encryption',
       C: 'Hashing',
-      D: 'Digital signing only',
+      D: 'Digital signing',
     },
     answer: 'A',
   },
 
   {
     id: 51,
-    question: 'Which algorithm is a widely used symmetric block cipher?',
+    question:
+      'Which algorithm is a widely used symmetric block cipher?',
     options: {
       A: 'AES',
       B: 'RSA',
@@ -652,7 +687,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 52,
-    question: 'Which algorithm is commonly associated with public-key cryptography?',
+    question:
+      'Which algorithm is commonly associated with public-key cryptography?',
     options: {
       A: 'RSA',
       B: 'AES',
@@ -664,7 +700,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 53,
-    question: 'What is a public key used for in public-key cryptography?',
+    question:
+      'What is a public key used for in public-key cryptography?',
     options: {
       A: 'It can be shared publicly for specific cryptographic operations',
       B: 'It must always be kept secret',
@@ -676,7 +713,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 54,
-    question: 'What is a private key?',
+    question:
+      'What is a private key?',
     options: {
       A: 'A secret cryptographic key that must be protected',
       B: 'A public IP address',
@@ -688,7 +726,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 55,
-    question: 'Which technology allows two parties to establish a shared secret over an insecure channel?',
+    question:
+      'Which technology allows two parties to establish a shared secret over an insecure channel?',
     options: {
       A: 'Diffie-Hellman',
       B: 'DHCP',
@@ -700,7 +739,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 56,
-    question: 'What is a digital certificate commonly used to bind?',
+    question:
+      'What is a digital certificate commonly used to bind?',
     options: {
       A: 'An identity to a public key',
       B: 'A MAC address to a switch port only',
@@ -712,7 +752,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 57,
-    question: 'What does PKI stand for?',
+    question:
+      'What does PKI stand for?',
     options: {
       A: 'Public Key Infrastructure',
       B: 'Private Key Interface',
@@ -724,7 +765,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 58,
-    question: 'Which security property means data has not been altered without authorization?',
+    question:
+      'Which security property means data has not been altered without authorization?',
     options: {
       A: 'Integrity',
       B: 'Availability',
@@ -736,7 +778,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 59,
-    question: 'Which security property focuses on keeping information secret?',
+    question:
+      'Which security property focuses on keeping information secret?',
     options: {
       A: 'Confidentiality',
       B: 'Availability',
@@ -748,7 +791,8 @@ const QUESTION_BANK: Question[] = [
 
   {
     id: 60,
-    question: 'Which security property means a service or resource remains accessible when needed?',
+    question:
+      'Which security property means a service or resource remains accessible when needed?',
     options: {
       A: 'Availability',
       B: 'Confidentiality',
@@ -757,16 +801,9 @@ const QUESTION_BANK: Question[] = [
     },
     answer: 'A',
   },
-
 ];
 
-
-/* =========================================================
-   SHUFFLE
-========================================================= */
-
 function shuffle<T>(array: T[]): T[] {
-
   const result = [...array];
 
   for (
@@ -774,11 +811,9 @@ function shuffle<T>(array: T[]): T[] {
     i > 0;
     i--
   ) {
-
-    const j =
-      Math.floor(
-        Math.random() * (i + 1)
-      );
+    const j = Math.floor(
+      Math.random() * (i + 1)
+    );
 
     [
       result[i],
@@ -787,171 +822,101 @@ function shuffle<T>(array: T[]): T[] {
       result[j],
       result[i],
     ];
-
   }
 
   return result;
 }
 
-
-/* =========================================================
-   GENERATE QUIZ
-========================================================= */
-
 export async function generateQuiz(
   formData: FormData
 ) {
+  const num = Number(
+    formData.get('num')
+  );
 
-  try {
+  const attemptedString = String(
+    formData.get('attemptedIds') || ''
+  );
 
-    const num =
-      Number(
-        formData.get('num')
+  const attemptedIds =
+    attemptedString
+      .split(',')
+      .map((value) =>
+        Number(value.trim())
+      )
+      .filter((value) =>
+        Number.isInteger(value)
       );
 
+  const parsed =
+    quizInputSchema.safeParse({
+      num,
+      attemptedIds,
+    });
 
-    const attemptedString =
-      String(
-        formData.get(
-          'attemptedIds'
-        ) || ''
-      );
-
-
-    const attemptedIds =
-      attemptedString
-        .split(',')
-        .map(
-          (value) =>
-            Number(
-              value.trim()
-            )
-        )
-        .filter(
-          (value) =>
-            Number.isInteger(value)
-        );
-
-
-    const parsed =
-      quizInputSchema.safeParse({
-        num,
-        attemptedIds,
-      });
-
-
-    if (!parsed.success) {
-
-      throw new Error(
-        'Invalid quiz settings.'
-      );
-
-    }
-
-
-    const {
-      num: questionCount,
-      attemptedIds:
-        previousIds,
-    } = parsed.data;
-
-
-    const attemptedSet =
-      new Set(previousIds);
-
-
-    /*
-     * First choose questions that the user
-     * has NOT attempted.
-     */
-
-    let available =
-      QUESTION_BANK.filter(
-        (question) =>
-          !attemptedSet.has(
-            question.id
-          )
-      );
-
-
-    let cycleReset = false;
-
-
-    /*
-     * If the user has completed almost
-     * the entire bank and there aren't
-     * enough fresh questions, start a
-     * new rotation.
-     */
-
-    if (
-      available.length <
-      questionCount
-    ) {
-
-      available =
-        [...QUESTION_BANK];
-
-      cycleReset = true;
-
-    }
-
-
-    const selected =
-      shuffle(available)
-        .slice(
-          0,
-          questionCount
-        );
-
-
-    const questions =
-      selected.map(
-        ({
-          id,
-          question,
-          options,
-        }) => ({
-          id,
-          question,
-          options,
-        })
-      );
-
-
-    const answer_key:
-      Record<string, string> = {};
-
-
-    selected.forEach(
-      (question) => {
-
-        answer_key[
-          String(question.id)
-        ] =
-          question.answer;
-
-      }
-    );
-
-
-    return {
-      questions,
-      answer_key,
-      cycleReset,
-    };
-
-  } catch (error) {
-
-    console.error(
-      'generateQuiz error:',
-      error
-    );
-
+  if (!parsed.success) {
     throw new Error(
-      'Unable to generate quiz.'
+      'Invalid quiz settings.'
     );
-
   }
 
+  const {
+    num: questionCount,
+    attemptedIds: previousIds,
+  } = parsed.data;
+
+  const attemptedSet =
+    new Set(previousIds);
+
+  let available =
+    QUESTION_BANK.filter(
+      (question) =>
+        !attemptedSet.has(question.id)
+    );
+
+  let cycleReset = false;
+
+  if (
+    available.length <
+    questionCount
+  ) {
+    available = [...QUESTION_BANK];
+    cycleReset = true;
+  }
+
+  const selected =
+    shuffle(available).slice(
+      0,
+      questionCount
+    );
+
+  const questions =
+    selected.map(
+      ({
+        id,
+        question,
+        options,
+      }) => ({
+        id,
+        question,
+        options,
+      })
+    );
+
+  const answer_key: Record<
+    string,
+    string
+  > = {};
+
+  selected.forEach((question) => {
+    answer_key[
+      String(question.id)
+    ] = question.answer;
+  });
+
+  return {
+    questions,
+    answer_key,
+    cycleReset,
+  };
 }
