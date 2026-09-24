@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { Eye, EyeOff } from 'lucide-react';
+
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+
 import {
   Card,
   CardContent,
@@ -14,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+
 import {
   Form,
   FormControl,
@@ -22,16 +27,35 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+
 import { Input } from '@/components/ui/input';
-import { useAuth, useFirestore, setDocumentNonBlocking } from '@/firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+
+import {
+  useAuth,
+  useFirestore,
+  setDocumentNonBlocking,
+} from '@/firebase';
+
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
+
 import { doc } from 'firebase/firestore';
 import { Logo } from '@/components/logo';
 
 const formSchema = z.object({
-  displayName: z.string().min(1, { message: 'Name is required.' }),
-  email: z.string().email({ message: 'Please enter a valid email.' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  displayName: z.string().min(1, {
+    message: 'Name is required.',
+  }),
+
+  email: z.string().email({
+    message: 'Please enter a valid email.',
+  }),
+
+  password: z.string().min(6, {
+    message: 'Password must be at least 6 characters.',
+  }),
 });
 
 export default function SignupPage() {
@@ -40,8 +64,11 @@ export default function SignupPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const [showPassword, setShowPassword] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+
     defaultValues: {
       displayName: '',
       email: '',
@@ -51,72 +78,109 @@ export default function SignupPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        values.email,
+        values.password
+      );
+
       const user = userCredential.user;
 
       // Update user profile in Firebase Auth
       await updateProfile(user, {
-        displayName: values.displayName
+        displayName: values.displayName,
       });
 
       // Create user document in Firestore
       const userRef = doc(firestore, 'users', user.uid);
-      setDocumentNonBlocking(userRef, {
-        id: user.uid,
-        email: user.email,
-        displayName: values.displayName,
-        createdAt: new Date().toISOString(),
-      }, { merge: true });
-      
+
+      setDocumentNonBlocking(
+        userRef,
+        {
+          id: user.uid,
+          email: user.email,
+          displayName: values.displayName,
+          createdAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
       toast({
         title: 'Signup Successful',
         description: 'Your account has been created.',
       });
+
       router.push('/dashboard');
     } catch (error: any) {
       console.error('Signup Error:', error);
+
       toast({
         variant: 'destructive',
         title: 'Signup Failed',
-        description: error.message || 'An unknown error occurred.',
+        description:
+          error.message || 'An unknown error occurred.',
       });
     }
   }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40">
-        <div className="mb-8">
-            <Logo />
-        </div>
+
+      <div className="mb-8">
+        <Logo />
+      </div>
+
       <Card className="w-full max-w-sm">
+
         <CardHeader>
-          <CardTitle className="text-2xl">Sign Up</CardTitle>
+          <CardTitle className="text-2xl">
+            Sign Up
+          </CardTitle>
+
           <CardDescription>
             Enter your information to create an account.
           </CardDescription>
         </CardHeader>
+
         <CardContent>
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
-               <FormField
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="grid gap-4"
+            >
+
+              {/* Name */}
+              <FormField
                 control={form.control}
                 name="displayName"
                 render={({ field }) => (
                   <FormItem>
+
                     <FormLabel>Name</FormLabel>
+
                     <FormControl>
-                      <Input placeholder="John Doe" {...field} />
+                      <Input
+                        placeholder="John Doe"
+                        {...field}
+                      />
                     </FormControl>
+
                     <FormMessage />
+
                   </FormItem>
                 )}
               />
+
+              {/* Email */}
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
+
                     <FormLabel>Email</FormLabel>
+
                     <FormControl>
                       <Input
                         type="email"
@@ -124,36 +188,87 @@ export default function SignupPage() {
                         {...field}
                       />
                     </FormControl>
+
                     <FormMessage />
+
                   </FormItem>
                 )}
               />
+
+              {/* Password */}
               <FormField
                 control={form.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
+
                     <FormLabel>Password</FormLabel>
+
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <div className="relative">
+
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="••••••••"
+                          className="pr-10"
+                          {...field}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowPassword((prev) => !prev)
+                          }
+                          className="absolute right-0 top-0 flex h-full w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+                          aria-label={
+                            showPassword
+                              ? 'Hide password'
+                              : 'Show password'
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
+
+                      </div>
                     </FormControl>
+
                     <FormMessage />
+
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full">
+
+              <Button
+                type="submit"
+                className="w-full"
+              >
                 Create an account
               </Button>
+
             </form>
           </Form>
+
           <div className="mt-4 text-center text-sm">
+
             Already have an account?{' '}
-            <Link href="/login" className="underline">
+
+            <Link
+              href="/login"
+              className="underline"
+            >
               Login
             </Link>
+
           </div>
+
         </CardContent>
+
       </Card>
+
     </div>
   );
 }
