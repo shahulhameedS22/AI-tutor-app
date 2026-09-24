@@ -1,948 +1,570 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import * as z from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+import { useUser } from '@/firebase';
+
+import { Header } from '@/components/layout/header';
 
 import { Button } from '@/components/ui/button';
 
 import {
   Card,
   CardContent,
-  CardFooter,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from '@/components/ui/form';
-
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
 
 import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from '@/components/ui/avatar';
+  Trophy,
+  RotateCcw,
+  CheckCircle,
+  XCircle,
+} from 'lucide-react';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { generateQuiz } from './actions';
 
-import { Bot, History, Plus, Send } from 'lucide-react';
-
-import { cryptographyChatbot } from '@/ai/flows/cryptography-chatbot';
-
-import { Header } from '@/components/layout/header';
-
-import {
-  useUser,
-  useFirestore,
-  useCollection,
-  setDocumentNonBlocking,
-  useMemoFirebase,
-} from '@/firebase';
-
-import { useRouter } from 'next/navigation';
-
-import {
-  collection,
-  doc,
-  query,
-  orderBy,
-} from 'firebase/firestore';
-
-
-const formSchema = z.object({
-  question: z
-    .string()
-    .trim()
-    .min(1, {
-      message: 'Please enter a question.',
-    }),
-});
-
-
-type Message = {
-  id?: string;
-  role: 'user' | 'model';
-  content: string;
-  createdAt?: string;
+type Question = {
+  id: number;
+  question: string;
+  options: Record<string, string>;
 };
 
+type QuizData = {
+  questions: Question[];
+  answer_key: Record<string, string>;
+  cycleReset?: boolean;
+};
 
-export default function CryptographyChatbotPage() {
+type UserAnswers = Record<string, string>;
 
-  const [messages, setMessages] = useState<Message[]>([]);
+function getFeedback(percentage: number) {
+  if (percentage >= 90) {
+    return {
+      title: 'Excellent Work!',
+      message:
+        'Excellent performance. You have a strong understanding of these concepts.',
+    };
+  }
 
-  const [isLoading, setIsLoading] = useState(false);
+  if (percentage >= 75) {
+    return {
+      title: 'Great Job!',
+      message:
+        'Good performance. You understand most of the concepts, with only a few areas to revise.',
+    };
+  }
 
-  const [historyOpen, setHistoryOpen] = useState(false);
+  if (percentage >= 60) {
+    return {
+      title: 'Good Effort!',
+      message:
+        'You have a basic understanding. Review the incorrect answers and try another quiz.',
+    };
+  }
 
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  return {
+    title: 'Keep Practicing!',
+    message:
+      'Do not worry. Review the concepts behind your incorrect answers and take another quiz.',
+  };
+}
 
-  const {
-    user,
-    isUserLoading,
-  } = useUser();
-
-  const firestore = useFirestore();
-
+export default function QuizGeneratorPage() {
   const router = useRouter();
 
+  const { user, isUserLoading } = useUser();
 
-  /*
-   * --------------------------------------------------
-   * FIRESTORE CHAT HISTORY
-   * --------------------------------------------------
-   */
+  const [quizData, setQuizData] =
+    useState<QuizData | null>(null);
 
-  const chatHistoryQuery = useMemoFirebase(() => {
+  const [results, setResults] = useState<{
+    score: number;
+    total: number;
+    percentage: number;
+    userAnswers: UserAnswers;
+  } | null>(null);
 
-    if (!user) {
-      return null;
-    }
+  const [isLoading, setIsLoading] =
+    useState(false);
 
-    return query(
-      collection(
-        firestore,
-        'users',
-        user.uid,
-        'cryptographyChatHistory'
-      ),
-      orderBy('createdAt', 'asc')
-    );
+  const [numQuestions, setNumQuestions] =
+    useState(5);
 
-  }, [firestore, user]);
+  const [errorMessage, setErrorMessage] =
+    useState('');
 
-
-  const {
-    data: savedMessages,
-    isLoading: isHistoryLoading,
-  } = useCollection<Message>(chatHistoryQuery);
-
-
-  /*
-   * --------------------------------------------------
-   * AUTH CHECK
-   * --------------------------------------------------
-   */
+  // ---------------------------------------------------------
+  // LOGIN CHECK
+  // ---------------------------------------------------------
 
   useEffect(() => {
-
     if (!isUserLoading && !user) {
       router.push('/login');
     }
-
   }, [
     user,
     isUserLoading,
     router,
   ]);
 
+  // ---------------------------------------------------------
+  // GENERATE QUIZ
+  // ---------------------------------------------------------
 
-  /*
-   * --------------------------------------------------
-   * DO NOT AUTOMATICALLY LOAD OLD CHAT
-   * --------------------------------------------------
-   *
-   * The user should start with a fresh chat.
-   */
-
-  useEffect(() => {
-
+  async function handleGenerateQuiz() {
     if (!user) {
       return;
     }
-
-    setMessages([]);
-
-  }, [user]);
-
-
-  /*
-   * --------------------------------------------------
-   * FORM
-   * --------------------------------------------------
-   */
-
-  const form = useForm<
-    z.infer<typeof formSchema>
-  >({
-    resolver: zodResolver(formSchema),
-
-    defaultValues: {
-      question: '',
-    },
-  });
-
-
-  /*
-   * --------------------------------------------------
-   * START NEW CHAT
-   * --------------------------------------------------
-   */
-
-  function startNewChat() {
-
-    setMessages([]);
-
-    setActiveChatId(null);
-
-    form.reset();
-
-    setHistoryOpen(false);
-
-  }
-
-
-  /*
-   * --------------------------------------------------
-   * GET INITIALS
-   * --------------------------------------------------
-   */
-
-  function getInitials(
-    name?: string | null
-  ) {
-
-    if (!name) {
-      return 'U';
-    }
-
-    const names = name
-      .trim()
-      .split(' ')
-      .filter(Boolean);
-
-    if (names.length >= 2) {
-
-      return (
-        names[0][0] +
-        names[names.length - 1][0]
-      ).toUpperCase();
-
-    }
-
-    return name
-      .substring(0, 2)
-      .toUpperCase();
-  }
-
-
-  /*
-   * --------------------------------------------------
-   * SEND MESSAGE
-   * --------------------------------------------------
-   */
-
-  async function onSubmit(
-    values: z.infer<typeof formSchema>
-  ) {
-
-    if (!user) {
-      return;
-    }
-
-    const question =
-      values.question.trim();
-
-    if (!question) {
-      return;
-    }
-
-    setIsLoading(true);
-
-    form.reset();
-
-
-    /*
-     * USER MESSAGE
-     */
-
-    const userMessage: Message = {
-      role: 'user',
-      content: question,
-    };
-
-
-    setMessages((previous) => [
-      ...previous,
-      userMessage,
-    ]);
-
-
-    /*
-     * FIRESTORE
-     */
 
     try {
+      setIsLoading(true);
+      setErrorMessage('');
+      setQuizData(null);
+      setResults(null);
 
-      const historyCollection =
-        collection(
-          firestore,
-          'users',
-          user.uid,
-          'cryptographyChatHistory'
-        );
+      const formData = new FormData();
 
-
-      const userMessageRef =
-        doc(historyCollection);
-
-
-      setDocumentNonBlocking(
-        userMessageRef,
-
-        {
-          id: userMessageRef.id,
-          role: 'user',
-          content: question,
-          userId: user.uid,
-          chatId:
-            activeChatId ||
-            userMessageRef.id,
-          createdAt:
-            new Date().toISOString(),
-        },
-
-        {
-          merge: true,
-        }
+      formData.append(
+        'num',
+        String(numQuestions)
       );
 
+      // No previous quiz history is used.
+      formData.append(
+        'attemptedIds',
+        ''
+      );
 
-      /*
-       * --------------------------------------------------
-       * GREETINGS
-       * --------------------------------------------------
-       */
-
-      const greetingPattern =
-        /^(hi|hii|hiii|hello|hey|heyy|hai|good morning|good afternoon|good evening)[!. ]*$/i;
-
+      const generatedQuiz =
+        await generateQuiz(formData);
 
       if (
-        greetingPattern.test(question)
+        !generatedQuiz ||
+        !generatedQuiz.questions ||
+        generatedQuiz.questions.length === 0
       ) {
-
-        const welcomeMessage: Message = {
-          role: 'model',
-
-          content:
-            'Hello! 👋 Welcome to the Cryptography Tutor. How can I help you today?',
-        };
-
-
-        setMessages((previous) => [
-          ...previous,
-          welcomeMessage,
-        ]);
-
-
-        const welcomeRef =
-          doc(historyCollection);
-
-
-        setDocumentNonBlocking(
-          welcomeRef,
-
-          {
-            id: welcomeRef.id,
-            role: 'model',
-            content:
-              welcomeMessage.content,
-            userId: user.uid,
-            chatId:
-              activeChatId ||
-              userMessageRef.id,
-            createdAt:
-              new Date().toISOString(),
-          },
-
-          {
-            merge: true,
-          }
+        throw new Error(
+          'No quiz questions were generated.'
         );
-
-
-        return;
       }
 
-
-      /*
-       * --------------------------------------------------
-       * AI HISTORY
-       * --------------------------------------------------
-       */
-
-      const historyForAI = [
-        ...messages,
-        userMessage,
-      ]
-        .slice(-12)
-        .map((message) => ({
-          role: message.role,
-          content: message.content,
-        }));
-
-
-      /*
-       * --------------------------------------------------
-       * CALL AI
-       * --------------------------------------------------
-       */
-
-      const result =
-        await cryptographyChatbot({
-          history: historyForAI,
-          question,
-        });
-
-
-      const response =
-        result?.response ||
-        'I could not generate a response right now. Please try again.';
-
-
-      const modelMessage: Message = {
-        role: 'model',
-        content: response,
-      };
-
-
-      /*
-       * SHOW AI RESPONSE
-       */
-
-      setMessages((previous) => [
-        ...previous,
-        modelMessage,
-      ]);
-
-
-      /*
-       * SAVE AI RESPONSE
-       */
-
-      const modelMessageRef =
-        doc(historyCollection);
-
-
-      setDocumentNonBlocking(
-        modelMessageRef,
-
-        {
-          id: modelMessageRef.id,
-          role: 'model',
-          content: response,
-          userId: user.uid,
-          chatId:
-            activeChatId ||
-            userMessageRef.id,
-          createdAt:
-            new Date().toISOString(),
-        },
-
-        {
-          merge: true,
-        }
-      );
-
+      setQuizData(generatedQuiz);
     } catch (error) {
-
       console.error(
-        'Chatbot request failed:',
+        'Quiz generation failed:',
         error
       );
 
-
-      /*
-       * IMPORTANT:
-       * Never crash the page.
-       */
-
-      const friendlyMessage: Message = {
-        role: 'model',
-
-        content:
-          'The AI service is temporarily unavailable. Please wait a moment and try again.',
-      };
-
-
-      setMessages((previous) => [
-        ...previous,
-        friendlyMessage,
-      ]);
-
+      setErrorMessage(
+        'Unable to generate the quiz right now. Please try again.'
+      );
     } finally {
-
       setIsLoading(false);
-
     }
   }
 
+  // ---------------------------------------------------------
+  // SUBMIT QUIZ
+  // ---------------------------------------------------------
 
-  /*
-   * --------------------------------------------------
-   * LOADING
-   * --------------------------------------------------
-   */
-
-  if (
-    isUserLoading ||
-    !user
+  function handleSubmitQuiz(
+    event: React.FormEvent<HTMLFormElement>
   ) {
+    event.preventDefault();
 
-    return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
+    if (!quizData) {
+      return;
+    }
+
+    const form = new FormData(
+      event.currentTarget
     );
 
+    const userAnswers: UserAnswers = {};
+
+    quizData.questions.forEach(
+      (question) => {
+        const answer = form.get(
+          `question-${question.id}`
+        );
+
+        userAnswers[
+          String(question.id)
+        ] = answer
+          ? String(answer)
+          : '';
+      }
+    );
+
+    let score = 0;
+
+    quizData.questions.forEach(
+      (question) => {
+        const userAnswer =
+          userAnswers[
+            String(question.id)
+          ] || '';
+
+        const correctAnswer =
+          quizData.answer_key[
+            String(question.id)
+          ] || '';
+
+        if (
+          userAnswer === correctAnswer
+        ) {
+          score++;
+        }
+      }
+    );
+
+    const total =
+      quizData.questions.length;
+
+    const percentage =
+      Math.round(
+        (score / total) * 100
+      );
+
+    setResults({
+      score,
+      total,
+      percentage,
+      userAnswers,
+    });
   }
 
+  // ---------------------------------------------------------
+  // START NEW QUIZ
+  // ---------------------------------------------------------
 
-  /*
-   * --------------------------------------------------
-   * UI
-   * --------------------------------------------------
-   */
+  function startNewQuiz() {
+    setQuizData(null);
+    setResults(null);
+    setErrorMessage('');
+  }
+
+  // ---------------------------------------------------------
+  // LOADING
+  // ---------------------------------------------------------
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------
+  // MAIN PAGE
+  // ---------------------------------------------------------
 
   return (
-
-    <div className="flex min-h-screen flex-col">
-
+    <div className="min-h-screen">
       <Header />
 
-
-      <main className="flex flex-1 justify-center p-4">
-
-        <Card className="flex h-[78vh] w-full max-w-4xl flex-col">
-
-
-          {/* HEADER */}
-
-          <CardHeader className="border-b">
-
-            <div className="flex items-center justify-between">
-
-              <CardTitle className="flex items-center gap-2">
-
-                <Bot className="h-6 w-6" />
-
-                Cryptography Tutor
-
-              </CardTitle>
-
-
-              <div className="flex items-center gap-2">
-
-
-                {/* NEW CHAT */}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={startNewChat}
-                >
-
-                  <Plus className="mr-2 h-4 w-4" />
-
-                  New Chat
-
-                </Button>
-
-
-                {/* HISTORY */}
-
-                <Dialog
-                  open={historyOpen}
-                  onOpenChange={setHistoryOpen}
-                >
-
-                  <DialogTrigger asChild>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                    >
-
-                      <History className="mr-2 h-4 w-4" />
-
-                      History
-
-                    </Button>
-
-                  </DialogTrigger>
-
-
-                  <DialogContent className="max-h-[80vh] overflow-y-auto">
-
-                    <DialogHeader>
-
-                      <DialogTitle>
-                        Chat History
-                      </DialogTitle>
-
-                    </DialogHeader>
-
-
-                    <div className="space-y-3">
-
-                      {isHistoryLoading && (
-
-                        <p className="text-sm text-muted-foreground">
-                          Loading history...
-                        </p>
-
-                      )}
-
-
-                      {!isHistoryLoading &&
-                        (!savedMessages ||
-                          savedMessages.length === 0) && (
-
-                          <p className="text-sm text-muted-foreground">
-                            No previous conversations yet.
-                          </p>
-
-                        )}
-
-
-                      {savedMessages &&
-                        savedMessages.length > 0 && (
-
-                          <div className="space-y-2">
-
-                            {savedMessages
-                              .filter(
-                                (message) =>
-                                  message.role ===
-                                  'user'
-                              )
-                              .map(
-                                (
-                                  message,
-                                  index
-                                ) => (
-
-                                  <button
-                                    key={
-                                      message.id ||
-                                      index
-                                    }
-                                    className="w-full rounded-lg border p-3 text-left transition hover:bg-muted"
-                                    onClick={() => {
-
-                                      const selectedIndex =
-                                        savedMessages.findIndex(
-                                          (item) =>
-                                            item.id ===
-                                            message.id
-                                        );
-
-
-                                      if (
-                                        selectedIndex ===
-                                        -1
-                                      ) {
-                                        return;
-                                      }
-
-
-                                      const selectedChat =
-                                        savedMessages.slice(
-                                          selectedIndex
-                                        );
-
-
-                                      setMessages(
-                                        selectedChat
-                                      );
-
-
-                                      setHistoryOpen(
-                                        false
-                                      );
-
-                                    }}
-                                  >
-
-                                    <p className="font-medium">
-
-                                      {message.content.length >
-                                      70
-                                        ? message.content.substring(
-                                            0,
-                                            70
-                                          ) + '...'
-                                        : message.content}
-
-                                    </p>
-
-                                    <p className="mt-1 text-xs text-muted-foreground">
-
-                                      Previous question
-
-                                    </p>
-
-                                  </button>
-
-                                )
-                              )}
-
-                          </div>
-
-                        )}
-
-                    </div>
-
-                  </DialogContent>
-
-                </Dialog>
-
-              </div>
-
-            </div>
-
+      <main className="mx-auto max-w-5xl p-4 md:p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Quiz Generator
+            </CardTitle>
+
+            <CardDescription>
+              Test your knowledge and track your
+              progress.
+            </CardDescription>
           </CardHeader>
 
+          <CardContent className="space-y-8">
 
-          {/* CHAT */}
+            {/* ------------------------------------------------ */}
+            {/* QUIZ QUESTIONS */}
+            {/* ------------------------------------------------ */}
 
-          <CardContent className="flex-1 overflow-hidden">
+            {quizData && !results && (
+              <form
+                onSubmit={handleSubmitQuiz}
+                className="space-y-6"
+              >
+                <div className="rounded-lg border p-4">
+                  <p className="font-medium">
+                    Answer all questions
+                  </p>
 
-            <ScrollArea className="h-full pr-4">
+                  <p className="text-sm text-muted-foreground">
+                    Select the option you think is
+                    correct.
+                  </p>
+                </div>
 
-              <div className="space-y-5 py-4">
-
-
-                {/* EMPTY CHAT */}
-
-                {messages.length === 0 &&
-                  !isLoading && (
-
-                    <div className="flex items-start gap-3">
-
-                      <Avatar className="h-9 w-9">
-
-                        <AvatarFallback>
-                          <Bot />
-                        </AvatarFallback>
-
-                      </Avatar>
-
-
-                      <div className="rounded-lg bg-muted px-4 py-3">
-
-                        <p className="text-sm">
-
-                          Hello! 👋
-
+                {quizData.questions.map(
+                  (question, index) => (
+                    <Card key={question.id}>
+                      <CardContent className="pt-6">
+                        <p className="mb-4 font-semibold">
+                          {index + 1}.{' '}
+                          {question.question}
                         </p>
 
-                        <p className="mt-1 text-sm">
+                        <div className="space-y-3">
+                          {Object.entries(
+                            question.options
+                          ).map(
+                            ([key, value]) => (
+                              <label
+                                key={key}
+                                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition hover:bg-muted"
+                              >
+                                <input
+                                  type="radio"
+                                  name={`question-${question.id}`}
+                                  value={key}
+                                />
 
-                          Welcome to the Cryptography Tutor.
-                          What would you like to learn today?
-
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-
-                {/* MESSAGES */}
-
-                {messages.map(
-                  (message, index) => (
-
-                    <div
-                      key={
-                        message.id ||
-                        `${message.role}-${index}`
-                      }
-
-                      className={`flex items-start gap-3 ${
-                        message.role ===
-                        'user'
-                          ? 'justify-end'
-                          : ''
-                      }`}
-                    >
-
-                      {message.role ===
-                        'model' && (
-
-                        <Avatar className="h-9 w-9">
-
-                          <AvatarFallback>
-                            <Bot />
-                          </AvatarFallback>
-
-                        </Avatar>
-
-                      )}
-
-
-                      <div
-                        className={`max-w-[80%] whitespace-pre-wrap rounded-lg px-4 py-3 text-sm ${
-                          message.role ===
-                          'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        }`}
-                      >
-
-                        {message.content}
-
-                      </div>
-
-
-                      {message.role ===
-                        'user' && (
-
-                        <Avatar className="h-9 w-9">
-
-                          <AvatarImage
-                            src={
-                              user.photoURL ||
-                              ''
-                            }
-                          />
-
-                          <AvatarFallback>
-                            {getInitials(
-                              user.displayName
-                            )}
-                          </AvatarFallback>
-
-                        </Avatar>
-
-                      )}
-
-                    </div>
-
+                                <span>
+                                  <strong>
+                                    {key}.
+                                  </strong>{' '}
+                                  {value}
+                                </span>
+                              </label>
+                            )
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
                   )
                 )}
 
+                <div className="flex gap-3">
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                  >
+                    Submit Quiz
+                  </Button>
 
-                {/* THINKING */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={startNewQuiz}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
 
-                {isLoading && (
+            {/* ------------------------------------------------ */}
+            {/* QUIZ RESULT */}
+            {/* ------------------------------------------------ */}
 
-                  <div className="flex items-start gap-3">
+            {results && (
+              <div className="space-y-6">
 
-                    <Avatar className="h-9 w-9">
+                <div className="text-center">
+                  <Trophy className="mx-auto mb-3 h-12 w-12" />
 
-                      <AvatarFallback>
-                        <Bot />
-                      </AvatarFallback>
+                  <h2 className="text-3xl font-bold">
+                    {results.score}/
+                    {results.total}
+                  </h2>
 
-                    </Avatar>
+                  <p className="text-lg text-muted-foreground">
+                    {results.percentage}%
+                  </p>
+                </div>
 
+                <div className="rounded-lg border p-5">
+                  <h3 className="text-xl font-semibold">
+                    {
+                      getFeedback(
+                        results.percentage
+                      ).title
+                    }
+                  </h3>
 
-                    <div className="rounded-lg bg-muted px-4 py-3">
+                  <p className="mt-2 text-muted-foreground">
+                    {
+                      getFeedback(
+                        results.percentage
+                      ).message
+                    }
+                  </p>
+                </div>
 
-                      <p className="text-sm text-muted-foreground">
-                        Thinking...
-                      </p>
+                {/* Question Review */}
 
-                    </div>
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold">
+                    Question Review
+                  </h2>
 
-                  </div>
+                  {quizData?.questions.map(
+                    (question, index) => {
+                      const userAnswer =
+                        results.userAnswers[
+                          String(
+                            question.id
+                          )
+                        ] || '';
 
-                )}
+                      const correctAnswer =
+                        quizData.answer_key[
+                          String(
+                            question.id
+                          )
+                        ] || '';
 
-              </div>
+                      const isCorrect =
+                        userAnswer ===
+                        correctAnswer;
 
-            </ScrollArea>
+                      return (
+                        <Card
+                          key={question.id}
+                        >
+                          <CardContent className="pt-6">
+                            <div className="flex gap-3">
+                              <div className="mt-1">
+                                {isCorrect ? (
+                                  <CheckCircle className="h-5 w-5" />
+                                ) : (
+                                  <XCircle className="h-5 w-5" />
+                                )}
+                              </div>
 
-          </CardContent>
+                              <div className="flex-1">
+                                <p className="font-medium">
+                                  {index + 1}.{' '}
+                                  {
+                                    question.question
+                                  }
+                                </p>
 
+                                <p className="mt-3 text-sm">
+                                  Your answer:{' '}
+                                  <span className="font-semibold">
+                                    {userAnswer
+                                      ? `${userAnswer}. ${
+                                          question
+                                            .options[
+                                            userAnswer
+                                          ] || ''
+                                        }`
+                                      : 'Not answered'}
+                                  </span>
+                                </p>
 
-          {/* INPUT */}
-
-          <CardFooter className="border-t pt-4">
-
-            <Form {...form}>
-
-              <form
-                onSubmit={form.handleSubmit(
-                  onSubmit
-                )}
-
-                className="flex w-full items-center gap-2"
-              >
-
-                <FormField
-                  control={form.control}
-                  name="question"
-
-                  render={({ field }) => (
-
-                    <FormItem className="flex-1">
-
-                      <FormControl>
-
-                        <Input
-                          placeholder="Ask about cryptography..."
-                          {...field}
-                          disabled={isLoading}
-                        />
-
-                      </FormControl>
-
-                      <FormMessage />
-
-                    </FormItem>
-
+                                <p className="mt-1 text-sm">
+                                  Correct answer:{' '}
+                                  <span className="font-semibold">
+                                    {correctAnswer}.{' '}
+                                    {
+                                      question
+                                        .options[
+                                        correctAnswer
+                                      ]
+                                    }
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    }
                   )}
-                />
-
+                </div>
 
                 <Button
-                  type="submit"
-                  disabled={
-                    isLoading ||
-                    !form.watch(
-                      'question'
-                    )?.trim()
-                  }
+                  onClick={startNewQuiz}
+                  className="w-full"
                 >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Take Another Quiz
+                </Button>
+              </div>
+            )}
 
-                  <Send className="mr-2 h-4 w-4" />
+            {/* ------------------------------------------------ */}
+            {/* QUIZ GENERATOR */}
+            {/* ------------------------------------------------ */}
 
-                  Send
+            {!quizData && !results && (
+              <div className="space-y-6">
 
+                <div className="rounded-lg border p-5">
+                  <Label htmlFor="numQuestions">
+                    Number of Questions
+                  </Label>
+
+                  <Input
+                    id="numQuestions"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={numQuestions}
+                    onChange={(event) => {
+                      const value =
+                        Number(
+                          event.target.value
+                        );
+
+                      if (
+                        value >= 1 &&
+                        value <= 10
+                      ) {
+                        setNumQuestions(
+                          value
+                        );
+                      }
+                    }}
+                    className="mt-2"
+                  />
+
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    You can generate between 1
+                    and 10 questions.
+                  </p>
+                </div>
+
+                {errorMessage && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm">
+                      {errorMessage}
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={
+                    handleGenerateQuiz
+                  }
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  {isLoading
+                    ? 'Generating Quiz...'
+                    : 'Generate Quiz'}
                 </Button>
 
-              </form>
+              </div>
+            )}
 
-            </Form>
-
-          </CardFooter>
-
+          </CardContent>
         </Card>
-
       </main>
-
     </div>
-
   );
 }
