@@ -284,9 +284,14 @@ export default function QuizGeneratorPage() {
         if (!cancelled) {
           setAttempts([]);
 
-          setHistoryError(
-            'Unable to load your previous quiz results. Please check your Firestore rules and Firebase connection.'
-          );
+          const message =
+  error instanceof Error
+    ? error.message
+    : String(error);
+
+setHistoryError(
+  `Firestore error: ${message}`
+);
         }
       } finally {
         if (!cancelled) {
