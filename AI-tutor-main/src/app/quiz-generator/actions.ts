@@ -4,17 +4,23 @@ import { z } from 'zod';
 
 const quizInputSchema = z.object({
   num: z.number().min(1).max(10),
+  attemptedIds: z.array(z.number()).default([]),
 });
 
 const generateMockQuiz = (
   num: number,
-  attemptedIds: number[] = []
+  attemptedIds: number[]
 ) => {
+
   const questions = [
+    // ------------------------------------------------
+    // YOUR EXISTING QUESTIONS
+    // ------------------------------------------------
+
     {
       id: 1,
       question:
-        'What is the theoretical peak download speed for 5G networks, as mentioned in the provided text?',
+        'What is the theoretical peak download speed for 5G networks?',
       options: {
         A: 'Up to 10 Gbps',
         B: 'Up to 100 Mbps',
@@ -26,7 +32,7 @@ const generateMockQuiz = (
     {
       id: 2,
       question:
-        'What is the typical latency range for 4G networks according to the text?',
+        'What is the typical latency range for 4G networks?',
       options: {
         A: 'As low as 1 millisecond',
         B: '5-10 milliseconds',
@@ -52,8 +58,8 @@ const generateMockQuiz = (
       question:
         "What does 'Gbps' stand for?",
       options: {
-        A: 'Gigabits per second',
-        B: 'Gigabytes per second',
+        A: 'Giga bits per second',
+        B: 'Giga bytes per second',
         C: 'Great bits per second',
         D: 'General bits per second',
       },
@@ -71,123 +77,140 @@ const generateMockQuiz = (
       },
     },
 
+    /*
+     * ADD YOUR OTHER QUESTIONS HERE.
+     *
+     * IMPORTANT:
+     * IDs must be unique.
+     *
+     * Example:
+     *
+     * id: 6
+     * id: 7
+     * id: 8
+     *
+     * ...
+     *
+     * You can have 50+ questions.
+     */
+
     {
       id: 6,
       question:
-        'Which generation introduced commercial 5G networks?',
+        'Which protocol is commonly used to automatically assign IP addresses?',
       options: {
-        A: '3G',
-        B: '4G',
-        C: '5G',
-        D: '2G',
+        A: 'HTTP',
+        B: 'DHCP',
+        C: 'FTP',
+        D: 'SMTP',
       },
     },
 
     {
       id: 7,
       question:
-        'What does MIMO stand for?',
+        'Which device forwards packets between different networks?',
       options: {
-        A: 'Multiple Input Multiple Output',
-        B: 'Maximum Input Maximum Output',
-        C: 'Multiple Internet Multiple Output',
-        D: 'Main Input Main Output',
+        A: 'Switch',
+        B: 'Hub',
+        C: 'Router',
+        D: 'Repeater',
       },
     },
 
     {
       id: 8,
       question:
-        'Which frequency range is commonly associated with 5G millimeter wave?',
+        'What does DNS primarily do?',
       options: {
-        A: 'Below 1 GHz',
-        B: '1-2 GHz',
-        C: 'Above 24 GHz',
-        D: '2-3 GHz',
+        A: 'Encrypt files',
+        B: 'Translate domain names into IP addresses',
+        C: 'Assign MAC addresses',
+        D: 'Create passwords',
       },
     },
 
     {
       id: 9,
       question:
-        'What is one major advantage of 5G?',
+        'Which layer of the OSI model handles routing?',
       options: {
-        A: 'Higher latency',
-        B: 'Lower data speeds',
-        C: 'Lower latency',
-        D: 'Less connectivity',
+        A: 'Physical',
+        B: 'Data Link',
+        C: 'Network',
+        D: 'Application',
       },
     },
 
     {
       id: 10,
       question:
-        'What does OFDM stand for?',
+        'What is the purpose of a firewall?',
       options: {
-        A: 'Orthogonal Frequency Division Multiplexing',
-        B: 'Optical Frequency Data Management',
-        C: 'Open Frequency Digital Modulation',
-        D: 'Online Frequency Division Mode',
+        A: 'Increase monitor brightness',
+        B: 'Filter network traffic',
+        C: 'Store passwords',
+        D: 'Create websites',
       },
     },
 
     {
       id: 11,
       question:
-        'Which technology helps 5G support many connected devices?',
+        'Which protocol is used for secure web browsing?',
       options: {
-        A: 'Massive MIMO',
-        B: 'Dial-up',
-        C: 'Bluetooth only',
-        D: 'DSL',
+        A: 'HTTP',
+        B: 'HTTPS',
+        C: 'FTP',
+        D: 'SMTP',
       },
     },
 
     {
       id: 12,
       question:
-        'What is latency?',
+        'Which address uniquely identifies a network interface?',
       options: {
-        A: 'The delay before data transfer begins',
-        B: 'The amount of storage',
-        C: 'The size of a network',
-        D: 'The number of users',
+        A: 'MAC address',
+        B: 'URL',
+        C: 'Port number',
+        D: 'Domain name',
       },
     },
 
     {
       id: 13,
       question:
-        'Which network generation generally provides higher speeds than 4G?',
+        'Which protocol is used to send email?',
       options: {
-        A: '2G',
-        B: '3G',
-        C: '5G',
-        D: '1G',
+        A: 'SMTP',
+        B: 'DNS',
+        C: 'ARP',
+        D: 'DHCP',
       },
     },
 
     {
       id: 14,
       question:
-        'What is an important application of 5G?',
+        'Which protocol maps an IP address to a MAC address?',
       options: {
-        A: 'IoT',
-        B: 'Telemedicine',
-        C: 'Autonomous vehicles',
-        D: 'All of the above',
+        A: 'DNS',
+        B: 'ARP',
+        C: 'HTTP',
+        D: 'FTP',
       },
     },
 
     {
       id: 15,
       question:
-        'What does IoT stand for?',
+        'What is the main purpose of encryption?',
       options: {
-        A: 'Internet of Things',
-        B: 'Input of Technology',
-        C: 'Internet of Telephones',
-        D: 'Internal Online Technology',
+        A: 'Increase file size',
+        B: 'Protect information from unauthorized access',
+        C: 'Delete information',
+        D: 'Slow down a network',
       },
     },
   ];
@@ -198,38 +221,68 @@ const generateMockQuiz = (
     '3': 'C',
     '4': 'A',
     '5': 'B',
-    '6': 'C',
-    '7': 'A',
-    '8': 'C',
+    '6': 'B',
+    '7': 'C',
+    '8': 'B',
     '9': 'C',
-    '10': 'A',
-    '11': 'A',
+    '10': 'B',
+    '11': 'B',
     '12': 'A',
-    '13': 'C',
-    '14': 'D',
-    '15': 'A',
+    '13': 'A',
+    '14': 'B',
+    '15': 'B',
   };
 
-  // Remove questions that the user has already attempted
-  const availableQuestions = questions.filter(
-    (question) => !attemptedIds.includes(question.id)
-  );
+  /*
+   * Remove previously attempted questions.
+   */
 
-  // Randomly shuffle the remaining questions
-  const shuffledQuestions = [...availableQuestions].sort(
-    () => Math.random() - 0.5
-  );
+  const availableQuestions =
+    questions.filter(
+      (question) =>
+        !attemptedIds.includes(
+          question.id
+        )
+    );
 
-  // Select the required number of questions
-  const selectedQuestions = shuffledQuestions.slice(0, num);
+  /*
+   * If all questions have been attempted,
+   * start the pool again.
+   *
+   * This prevents the quiz from getting stuck.
+   */
 
-  // Create answer key only for selected questions
-  const selectedAnswerKey = Object.fromEntries(
-    selectedQuestions.map((question) => [
-      question.id.toString(),
-      answerKey[question.id.toString()],
-    ])
-  );
+  const questionPool =
+    availableQuestions.length >= num
+      ? availableQuestions
+      : questions;
+
+  /*
+   * Shuffle the questions.
+   */
+
+  const shuffledQuestions = [
+    ...questionPool,
+  ].sort(() => Math.random() - 0.5);
+
+  /*
+   * Select only the requested number.
+   */
+
+  const selectedQuestions =
+    shuffledQuestions.slice(0, num);
+
+  const selectedAnswerKey =
+    Object.fromEntries(
+      Object.entries(answerKey).filter(
+        ([key]) =>
+          selectedQuestions.some(
+            (question) =>
+              question.id ===
+              Number(key)
+          )
+      )
+    );
 
   return {
     questions: selectedQuestions,
@@ -237,41 +290,41 @@ const generateMockQuiz = (
   };
 };
 
-export async function generateQuiz(formData: FormData) {
-  const input = quizInputSchema.safeParse({
-    num: Number(formData.get('num')),
-  });
+export async function generateQuiz(
+  formData: FormData
+) {
+  const num = Number(
+    formData.get('num')
+  );
+
+  const attemptedIdsString =
+    String(
+      formData.get('attemptedIds') || ''
+    );
+
+  const attemptedIds =
+    attemptedIdsString
+      ? attemptedIdsString
+          .split(',')
+          .map(Number)
+          .filter(Boolean)
+      : [];
+
+  const input =
+    quizInputSchema.safeParse({
+      num,
+      attemptedIds,
+    });
 
   if (!input.success) {
     return {
-      error: 'Invalid number of questions.',
-    };
-  }
-
-  // Get previously attempted question IDs
-  const attemptedIdsString =
-    formData.get('attemptedIds')?.toString() || '';
-
-  const attemptedIds = attemptedIdsString
-    ? attemptedIdsString
-        .split(',')
-        .map(Number)
-        .filter((id) => !isNaN(id))
-    : [];
-
-  // Generate quiz without previously attempted questions
-  const quizData = generateMockQuiz(
-    input.data.num,
-    attemptedIds
-  );
-
-  // Check whether enough new questions are available
-  if (quizData.questions.length < input.data.num) {
-    return {
       error:
-        'You have attempted all available questions. Please add more questions to the question bank.',
+        'Invalid number of questions.',
     };
   }
 
-  return quizData;
+  return generateMockQuiz(
+    input.data.num,
+    input.data.attemptedIds
+  );
 }
