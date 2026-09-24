@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { Button } from '@/components/ui/button';
+
 import {
   Card,
   CardContent,
@@ -23,10 +24,7 @@ import {
 } from '@/components/ui/form';
 
 import { Input } from '@/components/ui/input';
-
-import {
-  ScrollArea,
-} from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import {
   Avatar,
@@ -34,19 +32,19 @@ import {
   AvatarImage,
 } from '@/components/ui/avatar';
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+
+import { Bot, History, Plus, Send } from 'lucide-react';
+
 import { cryptographyChatbot } from '@/ai/flows/cryptography-chatbot';
 
 import { Header } from '@/components/layout/header';
-
-import {
-  Bot,
-  MessageSquare,
-  Plus,
-  History,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
 
 import {
   useUser,
@@ -60,16 +58,21 @@ import { useRouter } from 'next/navigation';
 
 import {
   collection,
+  doc,
   query,
   orderBy,
-  doc,
 } from 'firebase/firestore';
+
 
 const formSchema = z.object({
   question: z
     .string()
-    .min(1, { message: 'Please enter a question.' }),
+    .trim()
+    .min(1, {
+      message: 'Please enter a question.',
+    }),
 });
+
 
 type Message = {
   id?: string;
@@ -78,100 +81,105 @@ type Message = {
   createdAt?: string;
 };
 
-type Chat = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-};
 
 export default function CryptographyChatbotPage() {
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Current conversation
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // Currently selected chat
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
-  // History panel
-  const [showHistory, setShowHistory] = useState(true);
-
-  const { user, isUserLoading } = useUser();
-
-  const router = useRouter();
+  const {
+    user,
+    isUserLoading,
+  } = useUser();
 
   const firestore = useFirestore();
 
+  const router = useRouter();
+
+
   /*
-   * ---------------------------------------------------------
-   * CHAT HISTORY
-   * ---------------------------------------------------------
+   * --------------------------------------------------
+   * FIRESTORE CHAT HISTORY
+   * --------------------------------------------------
    */
 
-  const chatsQuery = useMemoFirebase(() => {
-    if (!user) return null;
+  const chatHistoryQuery = useMemoFirebase(() => {
+
+    if (!user) {
+      return null;
+    }
 
     return query(
       collection(
         firestore,
         'users',
         user.uid,
-        'cryptographyChats'
-      ),
-      orderBy('updatedAt', 'desc')
-    );
-  }, [firestore, user]);
-
-  const {
-    data: chats,
-    isLoading: isChatsLoading,
-  } = useCollection<Chat>(chatsQuery);
-
-  /*
-   * ---------------------------------------------------------
-   * CURRENT CHAT MESSAGES
-   * ---------------------------------------------------------
-   */
-
-  const messagesQuery = useMemoFirebase(() => {
-    if (!user || !activeChatId) return null;
-
-    return query(
-      collection(
-        firestore,
-        'users',
-        user.uid,
-        'cryptographyChats',
-        activeChatId,
-        'messages'
+        'cryptographyChatHistory'
       ),
       orderBy('createdAt', 'asc')
     );
-  }, [firestore, user, activeChatId]);
+
+  }, [firestore, user]);
+
 
   const {
-    data: chatMessages,
-    isLoading: isMessagesLoading,
-  } = useCollection<Message>(messagesQuery);
+    data: savedMessages,
+    isLoading: isHistoryLoading,
+  } = useCollection<Message>(chatHistoryQuery);
+
 
   /*
-   * Load selected chat messages
+   * --------------------------------------------------
+   * AUTH CHECK
+   * --------------------------------------------------
    */
+
   useEffect(() => {
-    if (activeChatId && chatMessages) {
-      setMessages(chatMessages);
+
+    if (!isUserLoading && !user) {
+      router.push('/login');
     }
-  }, [chatMessages, activeChatId]);
+
+  }, [
+    user,
+    isUserLoading,
+    router,
+  ]);
+
 
   /*
-   * ---------------------------------------------------------
-   * FORM
-   * ---------------------------------------------------------
+   * --------------------------------------------------
+   * DO NOT AUTOMATICALLY LOAD OLD CHAT
+   * --------------------------------------------------
+   *
+   * The user should start with a fresh chat.
    */
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  useEffect(() => {
+
+    if (!user) {
+      return;
+    }
+
+    setMessages([]);
+
+  }, [user]);
+
+
+  /*
+   * --------------------------------------------------
+   * FORM
+   * --------------------------------------------------
+   */
+
+  const form = useForm<
+    z.infer<typeof formSchema>
+  >({
     resolver: zodResolver(formSchema),
 
     defaultValues: {
@@ -179,705 +187,556 @@ export default function CryptographyChatbotPage() {
     },
   });
 
-  /*
-   * ---------------------------------------------------------
-   * LOGIN CHECK
-   * ---------------------------------------------------------
-   */
-
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, isUserLoading, router]);
 
   /*
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    * START NEW CHAT
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    */
 
   function startNewChat() {
-    setActiveChatId(null);
+
     setMessages([]);
+
+    setActiveChatId(null);
+
     form.reset();
 
-    // On mobile/tablet, close history after selecting new chat
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setShowHistory(false);
-    }
+    setHistoryOpen(false);
+
   }
 
-  /*
-   * ---------------------------------------------------------
-   * OPEN OLD CHAT
-   * ---------------------------------------------------------
-   */
-
-  function openChat(chatId: string) {
-    setActiveChatId(chatId);
-    setMessages([]);
-
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setShowHistory(false);
-    }
-  }
 
   /*
-   * ---------------------------------------------------------
-   * CREATE CHAT TITLE
-   * ---------------------------------------------------------
+   * --------------------------------------------------
+   * GET INITIALS
+   * --------------------------------------------------
    */
 
-  function createChatTitle(question: string) {
-    const cleaned = question.trim();
-
-    if (cleaned.length <= 45) {
-      return cleaned;
-    }
-
-    return cleaned.substring(0, 45) + '...';
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * SAVE MESSAGE
-   * ---------------------------------------------------------
-   */
-
-  function saveMessage(
-    chatId: string,
-    message: Message
+  function getInitials(
+    name?: string | null
   ) {
-    if (!user) return;
 
-    const messagesCollection = collection(
-      firestore,
-      'users',
-      user.uid,
-      'cryptographyChats',
-      chatId,
-      'messages'
-    );
+    if (!name) {
+      return 'U';
+    }
 
-    const messageRef = doc(messagesCollection);
+    const names = name
+      .trim()
+      .split(' ')
+      .filter(Boolean);
 
-    setDocumentNonBlocking(
-      messageRef,
-      {
-        id: messageRef.id,
-        role: message.role,
-        content: message.content,
-        createdAt:
-          message.createdAt ||
-          new Date().toISOString(),
-      },
-      {}
-    );
+    if (names.length >= 2) {
+
+      return (
+        names[0][0] +
+        names[names.length - 1][0]
+      ).toUpperCase();
+
+    }
+
+    return name
+      .substring(0, 2)
+      .toUpperCase();
   }
 
+
   /*
-   * ---------------------------------------------------------
-   * SUBMIT MESSAGE
-   * ---------------------------------------------------------
+   * --------------------------------------------------
+   * SEND MESSAGE
+   * --------------------------------------------------
    */
 
   async function onSubmit(
     values: z.infer<typeof formSchema>
   ) {
-    if (!user) return;
 
-    const question = values.question.trim();
+    if (!user) {
+      return;
+    }
 
-    if (!question) return;
+    const question =
+      values.question.trim();
+
+    if (!question) {
+      return;
+    }
 
     setIsLoading(true);
 
     form.reset();
 
+
+    /*
+     * USER MESSAGE
+     */
+
+    const userMessage: Message = {
+      role: 'user',
+      content: question,
+    };
+
+
+    setMessages((previous) => [
+      ...previous,
+      userMessage,
+    ]);
+
+
+    /*
+     * FIRESTORE
+     */
+
     try {
-      let currentChatId = activeChatId;
 
-      /*
-       * -----------------------------------------------------
-       * CREATE A NEW CHAT IF THIS IS THE FIRST MESSAGE
-       * -----------------------------------------------------
-       */
-
-      if (!currentChatId) {
-        const chatsCollection = collection(
+      const historyCollection =
+        collection(
           firestore,
           'users',
           user.uid,
-          'cryptographyChats'
+          'cryptographyChatHistory'
         );
 
-        const newChatRef = doc(chatsCollection);
 
-        currentChatId = newChatRef.id;
+      const userMessageRef =
+        doc(historyCollection);
 
-        const now = new Date().toISOString();
 
-        setDocumentNonBlocking(
-          newChatRef,
-          {
-            id: currentChatId,
+      setDocumentNonBlocking(
+        userMessageRef,
 
-            title: createChatTitle(question),
+        {
+          id: userMessageRef.id,
+          role: 'user',
+          content: question,
+          userId: user.uid,
+          chatId:
+            activeChatId ||
+            userMessageRef.id,
+          createdAt:
+            new Date().toISOString(),
+        },
 
-            userId: user.uid,
-
-            createdAt: now,
-
-            updatedAt: now,
-          },
-          {}
-        );
-
-        setActiveChatId(currentChatId);
-      } else {
-        /*
-         * Update chat's last activity time
-         */
-        const chatRef = doc(
-          firestore,
-          'users',
-          user.uid,
-          'cryptographyChats',
-          currentChatId
-        );
-
-        setDocumentNonBlocking(
-          chatRef,
-          {
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            merge: true,
-          }
-        );
-      }
-
-      /*
-       * -----------------------------------------------------
-       * USER MESSAGE
-       * -----------------------------------------------------
-       */
-
-      const userMessage: Message = {
-        role: 'user',
-        content: question,
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [
-        ...prev,
-        userMessage,
-      ]);
-
-      saveMessage(
-        currentChatId,
-        userMessage
+        {
+          merge: true,
+        }
       );
 
+
       /*
-       * -----------------------------------------------------
-       * GREETING HANDLER
-       * -----------------------------------------------------
+       * --------------------------------------------------
+       * GREETINGS
+       * --------------------------------------------------
        */
 
       const greetingPattern =
         /^(hi|hii|hiii|hello|hey|heyy|hai|good morning|good afternoon|good evening)[!. ]*$/i;
 
-      if (greetingPattern.test(question)) {
+
+      if (
+        greetingPattern.test(question)
+      ) {
+
         const welcomeMessage: Message = {
           role: 'model',
 
           content:
             'Hello! 👋 Welcome to the Cryptography Tutor. How can I help you today?',
-
-          createdAt: new Date().toISOString(),
         };
 
-        setMessages((prev) => [
-          ...prev,
+
+        setMessages((previous) => [
+          ...previous,
           welcomeMessage,
         ]);
 
-        saveMessage(
-          currentChatId,
-          welcomeMessage
+
+        const welcomeRef =
+          doc(historyCollection);
+
+
+        setDocumentNonBlocking(
+          welcomeRef,
+
+          {
+            id: welcomeRef.id,
+            role: 'model',
+            content:
+              welcomeMessage.content,
+            userId: user.uid,
+            chatId:
+              activeChatId ||
+              userMessageRef.id,
+            createdAt:
+              new Date().toISOString(),
+          },
+
+          {
+            merge: true,
+          }
         );
 
-        setIsLoading(false);
 
         return;
       }
 
+
       /*
-       * -----------------------------------------------------
-       * SEND TO AI
-       * -----------------------------------------------------
+       * --------------------------------------------------
+       * AI HISTORY
+       * --------------------------------------------------
        */
 
       const historyForAI = [
         ...messages,
         userMessage,
-      ].map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+      ]
+        .slice(-12)
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+
+
+      /*
+       * --------------------------------------------------
+       * CALL AI
+       * --------------------------------------------------
+       */
 
       const result =
         await cryptographyChatbot({
-          history: historyForAI.slice(0, -1),
-
+          history: historyForAI,
           question,
         });
 
-      /*
-       * -----------------------------------------------------
-       * AI RESPONSE
-       * -----------------------------------------------------
-       */
+
+      const response =
+        result?.response ||
+        'I could not generate a response right now. Please try again.';
+
 
       const modelMessage: Message = {
         role: 'model',
-
-        content: result.response,
-
-        createdAt: new Date().toISOString(),
+        content: response,
       };
 
-      setMessages((prev) => [
-        ...prev,
+
+      /*
+       * SHOW AI RESPONSE
+       */
+
+      setMessages((previous) => [
+        ...previous,
         modelMessage,
       ]);
 
-      saveMessage(
-        currentChatId,
-        modelMessage
-      );
 
       /*
-       * Update chat activity
+       * SAVE AI RESPONSE
        */
 
-      const chatRef = doc(
-        firestore,
-        'users',
-        user.uid,
-        'cryptographyChats',
-        currentChatId
-      );
+      const modelMessageRef =
+        doc(historyCollection);
+
 
       setDocumentNonBlocking(
-        chatRef,
+        modelMessageRef,
+
         {
-          updatedAt: new Date().toISOString(),
+          id: modelMessageRef.id,
+          role: 'model',
+          content: response,
+          userId: user.uid,
+          chatId:
+            activeChatId ||
+            userMessageRef.id,
+          createdAt:
+            new Date().toISOString(),
         },
+
         {
           merge: true,
         }
       );
-    } catch (error: any) {
+
+    } catch (error) {
+
       console.error(
-        'Cryptography chatbot error:',
+        'Chatbot request failed:',
         error
       );
 
+
       /*
-       * Professional error message
+       * IMPORTANT:
+       * Never crash the page.
        */
 
-      let friendlyMessage =
-        'The AI tutor is temporarily unavailable. Please try again in a moment.';
-
-      const errorText =
-        error?.message || '';
-
-      if (
-        errorText.includes('429') ||
-        errorText.includes('quota') ||
-        errorText.includes('Too Many Requests')
-      ) {
-        friendlyMessage =
-          'The AI tutor has temporarily reached its usage limit. Please try again after a short while.';
-      }
-
-      const errorMessage: Message = {
+      const friendlyMessage: Message = {
         role: 'model',
 
-        content: friendlyMessage,
-
-        createdAt: new Date().toISOString(),
+        content:
+          'The AI service is temporarily unavailable. Please wait a moment and try again.',
       };
 
-      setMessages((prev) => [
-        ...prev,
-        errorMessage,
+
+      setMessages((previous) => [
+        ...previous,
+        friendlyMessage,
       ]);
 
-      /*
-       * Don't save temporary API errors
-       * into the permanent chat history.
-       */
     } finally {
+
       setIsLoading(false);
+
     }
   }
 
-  /*
-   * ---------------------------------------------------------
-   * USER INITIALS
-   * ---------------------------------------------------------
-   */
-
-  const getInitials = (
-    name?: string | null
-  ) => {
-    if (!name) return 'U';
-
-    const names = name.split(' ');
-
-    if (
-      names.length > 1 &&
-      names[names.length - 1]
-    ) {
-      return (
-        names[0][0] +
-        names[names.length - 1][0]
-      );
-    }
-
-    return name.substring(0, 2);
-  };
 
   /*
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    * LOADING
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    */
 
   if (
     isUserLoading ||
-    !user ||
-    isChatsLoading
+    !user
   ) {
+
     return (
       <div className="flex h-screen items-center justify-center">
         Loading...
       </div>
     );
+
   }
 
+
   /*
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    * UI
-   * ---------------------------------------------------------
+   * --------------------------------------------------
    */
 
   return (
-    <div className="flex flex-col min-h-screen">
+
+    <div className="flex min-h-screen flex-col">
+
       <Header />
 
-      <div className="flex-1 flex justify-center items-center p-4">
 
-        <Card className="w-full max-w-6xl h-[80vh] flex overflow-hidden">
+      <main className="flex flex-1 justify-center p-4">
 
-          {/* =================================================
-              HISTORY SIDEBAR
-          ================================================= */}
+        <Card className="flex h-[78vh] w-full max-w-4xl flex-col">
 
-          {showHistory && (
-            <div className="hidden md:flex w-72 border-r flex-col bg-muted/20">
 
-              <div className="p-4 border-b">
+          {/* HEADER */}
+
+          <CardHeader className="border-b">
+
+            <div className="flex items-center justify-between">
+
+              <CardTitle className="flex items-center gap-2">
+
+                <Bot className="h-6 w-6" />
+
+                Cryptography Tutor
+
+              </CardTitle>
+
+
+              <div className="flex items-center gap-2">
+
+
+                {/* NEW CHAT */}
 
                 <Button
-                  className="w-full"
+                  variant="outline"
+                  size="sm"
                   onClick={startNewChat}
                 >
+
                   <Plus className="mr-2 h-4 w-4" />
 
                   New Chat
+
                 </Button>
 
-              </div>
 
-              <div className="px-4 pt-4">
+                {/* HISTORY */}
 
-                <div className="flex items-center gap-2 text-sm font-semibold">
+                <Dialog
+                  open={historyOpen}
+                  onOpenChange={setHistoryOpen}
+                >
 
-                  <History className="h-4 w-4" />
+                  <DialogTrigger asChild>
 
-                  Chat History
+                    <Button
+                      variant="outline"
+                      size="sm"
+                    >
 
-                </div>
+                      <History className="mr-2 h-4 w-4" />
 
-              </div>
+                      History
 
-              <ScrollArea className="flex-1 p-3">
+                    </Button>
 
-                <div className="space-y-2">
+                  </DialogTrigger>
 
-                  {!chats ||
-                  chats.length === 0 ? (
-                    <div className="text-sm text-muted-foreground text-center py-8">
-                      No previous chats yet.
-                    </div>
-                  ) : (
-                    chats.map((chat) => (
 
-                      <button
-                        key={chat.id}
-                        onClick={() =>
-                          openChat(chat.id)
-                        }
-                        className={`w-full text-left rounded-lg p-3 transition hover:bg-muted ${
-                          activeChatId === chat.id
-                            ? 'bg-muted'
-                            : ''
-                        }`}
-                      >
+                  <DialogContent className="max-h-[80vh] overflow-y-auto">
 
-                        <div className="flex items-start gap-2">
+                    <DialogHeader>
 
-                          <MessageSquare className="h-4 w-4 mt-0.5 shrink-0" />
+                      <DialogTitle>
+                        Chat History
+                      </DialogTitle>
 
-                          <div className="min-w-0">
+                    </DialogHeader>
 
-                            <p className="text-sm font-medium truncate">
-                              {chat.title}
-                            </p>
 
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {new Date(
-                                chat.updatedAt
-                              ).toLocaleDateString()}
-                            </p>
+                    <div className="space-y-3">
+
+                      {isHistoryLoading && (
+
+                        <p className="text-sm text-muted-foreground">
+                          Loading history...
+                        </p>
+
+                      )}
+
+
+                      {!isHistoryLoading &&
+                        (!savedMessages ||
+                          savedMessages.length === 0) && (
+
+                          <p className="text-sm text-muted-foreground">
+                            No previous conversations yet.
+                          </p>
+
+                        )}
+
+
+                      {savedMessages &&
+                        savedMessages.length > 0 && (
+
+                          <div className="space-y-2">
+
+                            {savedMessages
+                              .filter(
+                                (message) =>
+                                  message.role ===
+                                  'user'
+                              )
+                              .map(
+                                (
+                                  message,
+                                  index
+                                ) => (
+
+                                  <button
+                                    key={
+                                      message.id ||
+                                      index
+                                    }
+                                    className="w-full rounded-lg border p-3 text-left transition hover:bg-muted"
+                                    onClick={() => {
+
+                                      const selectedIndex =
+                                        savedMessages.findIndex(
+                                          (item) =>
+                                            item.id ===
+                                            message.id
+                                        );
+
+
+                                      if (
+                                        selectedIndex ===
+                                        -1
+                                      ) {
+                                        return;
+                                      }
+
+
+                                      const selectedChat =
+                                        savedMessages.slice(
+                                          selectedIndex
+                                        );
+
+
+                                      setMessages(
+                                        selectedChat
+                                      );
+
+
+                                      setHistoryOpen(
+                                        false
+                                      );
+
+                                    }}
+                                  >
+
+                                    <p className="font-medium">
+
+                                      {message.content.length >
+                                      70
+                                        ? message.content.substring(
+                                            0,
+                                            70
+                                          ) + '...'
+                                        : message.content}
+
+                                    </p>
+
+                                    <p className="mt-1 text-xs text-muted-foreground">
+
+                                      Previous question
+
+                                    </p>
+
+                                  </button>
+
+                                )
+                              )}
 
                           </div>
 
-                        </div>
+                        )}
 
-                      </button>
+                    </div>
 
-                    ))
-                  )}
+                  </DialogContent>
 
-                </div>
-
-              </ScrollArea>
-
-            </div>
-          )}
-
-          {/* =================================================
-              CHAT AREA
-          ================================================= */}
-
-          <div className="flex-1 flex flex-col min-w-0">
-
-            <CardHeader className="border-b">
-
-              <div className="flex items-center justify-between">
-
-                <CardTitle className="flex items-center gap-2">
-
-                  <Bot />
-
-                  Cryptography Tutor
-
-                </CardTitle>
-
-                <div className="flex items-center gap-2">
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setShowHistory(
-                        !showHistory
-                      )
-                    }
-                  >
-
-                    <History className="h-4 w-4 mr-2" />
-
-                    History
-
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={startNewChat}
-                  >
-
-                    <Plus className="h-4 w-4 mr-2" />
-
-                    New Chat
-
-                  </Button>
-
-                </div>
+                </Dialog>
 
               </div>
 
-            </CardHeader>
+            </div>
 
-            {/* =================================================
-                MESSAGES
-            ================================================= */}
+          </CardHeader>
 
-            <CardContent className="flex-1 overflow-hidden">
 
-              <ScrollArea className="h-full pr-4">
+          {/* CHAT */}
 
-                <div className="space-y-4 py-4">
+          <CardContent className="flex-1 overflow-hidden">
 
-                  {/* NEW CHAT SCREEN */}
+            <ScrollArea className="h-full pr-4">
 
-                  {messages.length === 0 &&
-                    !isLoading && (
-                      <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+              <div className="space-y-5 py-4">
 
-                        <div className="rounded-full bg-primary/10 p-4 mb-4">
 
-                          <Bot className="h-10 w-10 text-primary" />
+                {/* EMPTY CHAT */}
 
-                        </div>
+                {messages.length === 0 &&
+                  !isLoading && (
 
-                        <h2 className="text-xl font-semibold">
-                          Cryptography Tutor
-                        </h2>
-
-                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                          Ask questions about encryption,
-                          hashing, digital signatures,
-                          cryptographic algorithms,
-                          network security and more.
-                        </p>
-
-                        <div className="flex gap-2 mt-6 flex-wrap justify-center">
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              form.setValue(
-                                'question',
-                                'What is cryptography?'
-                              )
-                            }
-                          >
-                            What is cryptography?
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              form.setValue(
-                                'question',
-                                'Explain RSA'
-                              )
-                            }
-                          >
-                            Explain RSA
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              form.setValue(
-                                'question',
-                                'What is hashing?'
-                              )
-                            }
-                          >
-                            What is hashing?
-                          </Button>
-
-                        </div>
-
-                      </div>
-                    )}
-
-                  {messages.map(
-                    (message, index) => (
-
-                      <div
-                        key={
-                          message.id ||
-                          `${message.createdAt}-${index}`
-                        }
-                        className={`flex items-start gap-3 ${
-                          message.role ===
-                          'user'
-                            ? 'justify-end'
-                            : ''
-                        }`}
-                      >
-
-                        {message.role ===
-                          'model' && (
-                          <Avatar className="h-8 w-8">
-
-                            <AvatarFallback>
-                              <Bot />
-                            </AvatarFallback>
-
-                          </Avatar>
-                        )}
-
-                        <div
-                          className={`rounded-lg px-4 py-2 max-w-[80%] whitespace-pre-wrap ${
-                            message.role ===
-                            'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          }`}
-                        >
-
-                          <p className="text-sm">
-                            {message.content}
-                          </p>
-
-                        </div>
-
-                        {message.role ===
-                          'user' &&
-                          user && (
-                            <Avatar className="h-8 w-8">
-
-                              <AvatarImage
-                                src={
-                                  user.photoURL ||
-                                  ''
-                                }
-                              />
-
-                              <AvatarFallback>
-                                {getInitials(
-                                  user.displayName
-                                )}
-                              </AvatarFallback>
-
-                            </Avatar>
-                          )}
-
-                      </div>
-
-                    )
-                  )}
-
-                  {isLoading && (
                     <div className="flex items-start gap-3">
 
-                      <Avatar className="h-8 w-8">
+                      <Avatar className="h-9 w-9">
 
                         <AvatarFallback>
                           <Bot />
@@ -885,85 +744,205 @@ export default function CryptographyChatbotPage() {
 
                       </Avatar>
 
-                      <div className="rounded-lg px-4 py-2 bg-muted">
+
+                      <div className="rounded-lg bg-muted px-4 py-3">
 
                         <p className="text-sm">
-                          Thinking...
+
+                          Hello! 👋
+
+                        </p>
+
+                        <p className="mt-1 text-sm">
+
+                          Welcome to the Cryptography Tutor.
+                          What would you like to learn today?
+
                         </p>
 
                       </div>
 
                     </div>
+
                   )}
 
-                </div>
 
-              </ScrollArea>
+                {/* MESSAGES */}
 
-            </CardContent>
+                {messages.map(
+                  (message, index) => (
 
-            {/* =================================================
-                INPUT
-            ================================================= */}
+                    <div
+                      key={
+                        message.id ||
+                        `${message.role}-${index}`
+                      }
 
-            <CardFooter className="border-t pt-4">
+                      className={`flex items-start gap-3 ${
+                        message.role ===
+                        'user'
+                          ? 'justify-end'
+                          : ''
+                      }`}
+                    >
 
-              <Form {...form}>
+                      {message.role ===
+                        'model' && (
 
-                <form
-                  onSubmit={form.handleSubmit(
-                    onSubmit
-                  )}
-                  className="flex w-full items-center space-x-2"
-                >
+                        <Avatar className="h-9 w-9">
 
-                  <FormField
-                    control={form.control}
-                    name="question"
-                    render={({
-                      field,
-                    }) => (
+                          <AvatarFallback>
+                            <Bot />
+                          </AvatarFallback>
 
-                      <FormItem className="flex-1">
+                        </Avatar>
 
-                        <FormControl>
+                      )}
 
-                          <Input
-                            placeholder="Ask about cryptography..."
-                            {...field}
-                            disabled={
-                              isLoading
+
+                      <div
+                        className={`max-w-[80%] whitespace-pre-wrap rounded-lg px-4 py-3 text-sm ${
+                          message.role ===
+                          'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                      >
+
+                        {message.content}
+
+                      </div>
+
+
+                      {message.role ===
+                        'user' && (
+
+                        <Avatar className="h-9 w-9">
+
+                          <AvatarImage
+                            src={
+                              user.photoURL ||
+                              ''
                             }
                           />
 
-                        </FormControl>
+                          <AvatarFallback>
+                            {getInitials(
+                              user.displayName
+                            )}
+                          </AvatarFallback>
 
-                        <FormMessage />
+                        </Avatar>
 
-                      </FormItem>
+                      )}
 
-                    )}
-                  />
+                    </div>
 
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                  >
-                    Send
-                  </Button>
+                  )
+                )}
 
-                </form>
 
-              </Form>
+                {/* THINKING */}
 
-            </CardFooter>
+                {isLoading && (
 
-          </div>
+                  <div className="flex items-start gap-3">
+
+                    <Avatar className="h-9 w-9">
+
+                      <AvatarFallback>
+                        <Bot />
+                      </AvatarFallback>
+
+                    </Avatar>
+
+
+                    <div className="rounded-lg bg-muted px-4 py-3">
+
+                      <p className="text-sm text-muted-foreground">
+                        Thinking...
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+              </div>
+
+            </ScrollArea>
+
+          </CardContent>
+
+
+          {/* INPUT */}
+
+          <CardFooter className="border-t pt-4">
+
+            <Form {...form}>
+
+              <form
+                onSubmit={form.handleSubmit(
+                  onSubmit
+                )}
+
+                className="flex w-full items-center gap-2"
+              >
+
+                <FormField
+                  control={form.control}
+                  name="question"
+
+                  render={({ field }) => (
+
+                    <FormItem className="flex-1">
+
+                      <FormControl>
+
+                        <Input
+                          placeholder="Ask about cryptography..."
+                          {...field}
+                          disabled={isLoading}
+                        />
+
+                      </FormControl>
+
+                      <FormMessage />
+
+                    </FormItem>
+
+                  )}
+                />
+
+
+                <Button
+                  type="submit"
+                  disabled={
+                    isLoading ||
+                    !form.watch(
+                      'question'
+                    )?.trim()
+                  }
+                >
+
+                  <Send className="mr-2 h-4 w-4" />
+
+                  Send
+
+                </Button>
+
+              </form>
+
+            </Form>
+
+          </CardFooter>
 
         </Card>
 
-      </div>
+      </main>
 
     </div>
+
   );
 }
