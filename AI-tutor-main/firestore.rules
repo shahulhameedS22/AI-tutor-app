@@ -20,202 +20,52 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // -------------------------------------------------------------------------
-    // Helper Functions
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------
+    // Helper
+    // ---------------------------------------------------------
 
-    /**
-     * Checks if the user is authenticated.
-     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the currently authenticated user's ID matches the provided userId.
-     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * Checks if an existing document belongs to the authenticated user.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * Validates a new User profile document.
-     */
-    function userProfileIsValidOnCreate(userId) {
-      return request.resource.data.id == userId;
-    }
-
-    /**
-     * Prevents the User profile ID from being changed.
-     */
-    function userProfileIsValidOnUpdate() {
-      return request.resource.data.id == resource.data.id;
-    }
-
-    /**
-     * Validates a new Study Plan document.
-     */
-    function studyPlanIsValidOnCreate(userId) {
-      return request.resource.data.userId == userId;
-    }
-
-    /**
-     * Prevents the Study Plan userId from being changed.
-     */
-    function studyPlanIsValidOnUpdate() {
-      return request.resource.data.userId == resource.data.userId;
-    }
-
-    /**
-     * Validates a new Progress Report document.
-     */
-    function progressReportIsValidOnCreate(userId, studyPlanId) {
-      return request.resource.data.userId == userId
-          && request.resource.data.studyPlanId == studyPlanId;
-    }
-
-    /**
-     * Prevents Progress Report ownership fields from being changed.
-     */
-    function progressReportIsValidOnUpdate() {
-      return request.resource.data.userId == resource.data.userId
-          && request.resource.data.studyPlanId == resource.data.studyPlanId;
-    }
-
-    /**
-     * Validates a new Cryptography Chat Message document.
-     */
-    function cryptographyMessageIsValidOnCreate(userId) {
-      return request.resource.data.userId == userId;
-    }
-
-    /**
-     * Prevents the Cryptography Chat Message userId from being changed.
-     */
-    function cryptographyMessageIsValidOnUpdate() {
-      return request.resource.data.userId == resource.data.userId;
+      return isSignedIn()
+        && request.auth.uid == userId;
     }
 
 
-    // -------------------------------------------------------------------------
-    // USER COLLECTION
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------
+    // USER PROFILE
+    // ---------------------------------------------------------
 
     match /users/{userId} {
 
-      // User profile
-      allow get: if isOwner(userId);
-      allow list: if false;
+      // User can access only their own profile
+      allow read: if isOwner(userId);
 
-      allow create: if isOwner(userId)
-        && userProfileIsValidOnCreate(userId);
+      allow create: if isOwner(userId);
 
-      allow update: if isExistingOwner(userId)
-        && userProfileIsValidOnUpdate();
+      allow update: if isOwner(userId);
 
-      allow delete: if isExistingOwner(userId);
+      allow delete: if isOwner(userId);
 
 
-      // -----------------------------------------------------------------------
-      // STUDY PLANS
-      // -----------------------------------------------------------------------
+      // -------------------------------------------------------
+      // ALL USER SUBCOLLECTIONS
+      // -------------------------------------------------------
+      //
+      // This covers:
+      //
+      // /users/{userId}/quizAttempts/{attemptId}
+      // /users/{userId}/studyPlans/{studyPlanId}
+      // /users/{userId}/studyPlans/{studyPlanId}/progressReports/{id}
+      // /users/{userId}/cryptographyChatHistory/{messageId}
+      //
+      // Only the logged-in owner can access their own data.
+      //
 
-      match /studyPlans/{studyPlanId} {
-
-        allow get: if isOwner(userId);
-
-        allow list: if isOwner(userId);
-
-        allow create: if isOwner(userId)
-          && studyPlanIsValidOnCreate(userId);
-
-        allow update: if isExistingOwner(userId)
-          && studyPlanIsValidOnUpdate();
-
-        allow delete: if isExistingOwner(userId);
-
-
-        // ---------------------------------------------------------------------
-        // PROGRESS REPORTS
-        // ---------------------------------------------------------------------
-
-        match /progressReports/{progressReportId} {
-
-          allow get: if isOwner(userId);
-
-          allow list: if isOwner(userId);
-
-          allow create: if isOwner(userId)
-            && progressReportIsValidOnCreate(
-              userId,
-              studyPlanId
-            );
-
-          allow update: if isExistingOwner(userId)
-            && progressReportIsValidOnUpdate();
-
-          allow delete: if isExistingOwner(userId);
-        }
-      }
-
-
-      // -----------------------------------------------------------------------
-      // QUIZ ATTEMPTS
-      // -----------------------------------------------------------------------
-
-      /**
-       * Stores completed quiz attempts and results.
-       *
-       * Path:
-       * /users/{userId}/quizAttempts/{attemptId}
-       *
-       * Only the authenticated user who owns the parent user document
-       * can read or modify these quiz results.
-       */
-      match /quizAttempts/{attemptId} {
-
-        allow get: if isOwner(userId);
-
-        allow list: if isOwner(userId);
-
-        allow create: if isOwner(userId);
-
-        allow update: if isOwner(userId);
-
-        allow delete: if isOwner(userId);
-      }
-
-
-      // -----------------------------------------------------------------------
-      // CRYPTOGRAPHY CHAT HISTORY
-      // -----------------------------------------------------------------------
-
-      /**
-       * Manages a user's private cryptography chat history.
-       *
-       * Path:
-       * /users/{userId}/cryptographyChatHistory/{messageId}
-       */
-      match /cryptographyChatHistory/{messageId} {
-
-        allow get: if isOwner(userId);
-
-        allow list: if isOwner(userId);
-
-        allow create: if isOwner(userId)
-          && cryptographyMessageIsValidOnCreate(userId);
-
-        allow update: if isExistingOwner(userId)
-          && cryptographyMessageIsValidOnUpdate();
-
-        allow delete: if isExistingOwner(userId);
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
       }
     }
   }
