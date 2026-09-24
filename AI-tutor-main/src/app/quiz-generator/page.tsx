@@ -259,8 +259,9 @@ export default function QuizGeneratorPage() {
 
           <CardContent className="space-y-8">
 
-            {/* QUIZ QUESTIONS */}
-
+            {/* =========================
+                QUIZ QUESTIONS
+            ========================== */}
             {quizData && !results && (
               <form
                 onSubmit={handleSubmitQuiz}
@@ -336,11 +337,13 @@ export default function QuizGeneratorPage() {
               </form>
             )}
 
-            {/* RESULTS */}
-
+            {/* =========================
+                QUIZ RESULTS
+            ========================== */}
             {results && quizData && (
               <div className="space-y-6">
 
+                {/* Score */}
                 <div className="text-center">
                   <Trophy className="mx-auto mb-3 h-12 w-12" />
 
@@ -354,6 +357,7 @@ export default function QuizGeneratorPage() {
                   </p>
                 </div>
 
+                {/* Feedback */}
                 <div className="rounded-lg border p-5">
                   <h3 className="text-xl font-semibold">
                     {
@@ -372,8 +376,7 @@ export default function QuizGeneratorPage() {
                   </p>
                 </div>
 
-                {/* QUESTION REVIEW */}
-
+                {/* Question Review */}
                 <div className="space-y-4">
                   <h2 className="text-xl font-semibold">
                     Question Review
@@ -383,16 +386,12 @@ export default function QuizGeneratorPage() {
                     (question, index) => {
                       const userAnswer =
                         results.userAnswers[
-                          String(
-                            question.id
-                          )
+                          String(question.id)
                         ] || '';
 
                       const correctAnswer =
                         quizData.answer_key[
-                          String(
-                            question.id
-                          )
+                          String(question.id)
                         ] || '';
 
                       const isCorrect =
@@ -402,55 +401,90 @@ export default function QuizGeneratorPage() {
                       return (
                         <Card
                           key={question.id}
+                          className={
+                            isCorrect
+                              ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                              : 'border-red-500 bg-red-50 dark:bg-red-950/20'
+                          }
                         >
                           <CardContent className="pt-6">
-                            <div className="flex gap-3">
+                            <div className="space-y-4">
 
-                              <div className="mt-1">
+                              {/* Question Header */}
+                              <div className="flex items-start gap-3">
                                 {isCorrect ? (
-                                  <CheckCircle className="h-5 w-5" />
+                                  <CheckCircle className="mt-1 h-6 w-6 shrink-0 text-green-600" />
                                 ) : (
-                                  <XCircle className="h-5 w-5" />
+                                  <XCircle className="mt-1 h-6 w-6 shrink-0 text-red-600" />
                                 )}
+
+                                <div>
+                                  <p className="font-semibold">
+                                    {index + 1}.{' '}
+                                    {question.question}
+                                  </p>
+
+                                  <p
+                                    className={
+                                      isCorrect
+                                        ? 'mt-1 text-sm font-medium text-green-700 dark:text-green-400'
+                                        : 'mt-1 text-sm font-medium text-red-700 dark:text-red-400'
+                                    }
+                                  >
+                                    {isCorrect
+                                      ? '✓ Correct Answer'
+                                      : '✗ Incorrect Answer'}
+                                  </p>
+                                </div>
                               </div>
 
-                              <div className="flex-1">
+                              {/* Your Answer */}
+                              <div
+                                className={
+                                  isCorrect
+                                    ? 'rounded-lg border border-green-300 bg-green-100 p-4 dark:border-green-800 dark:bg-green-950/40'
+                                    : 'rounded-lg border border-red-300 bg-red-100 p-4 dark:border-red-800 dark:bg-red-950/40'
+                                }
+                              >
+                                <p className="text-sm font-medium text-muted-foreground">
+                                  Your Answer
+                                </p>
 
-                                <p className="font-medium">
-                                  {index + 1}.{' '}
-                                  {
-                                    question.question
+                                <p
+                                  className={
+                                    isCorrect
+                                      ? 'mt-1 font-semibold text-green-800 dark:text-green-300'
+                                      : 'mt-1 font-semibold text-red-800 dark:text-red-300'
                                   }
+                                >
+                                  {userAnswer
+                                    ? `${userAnswer}. ${
+                                        question.options[
+                                          userAnswer
+                                        ] || ''
+                                      }`
+                                    : 'Not answered'}
                                 </p>
+                              </div>
 
-                                <p className="mt-3 text-sm">
-                                  Your answer:{' '}
-                                  <span className="font-semibold">
-                                    {userAnswer
-                                      ? `${userAnswer}. ${
-                                          question
-                                            .options[
-                                            userAnswer
-                                          ] || ''
-                                        }`
-                                      : 'Not answered'}
-                                  </span>
-                                </p>
+                              {/* Correct Answer */}
+                              {!isCorrect && (
+                                <div className="rounded-lg border border-green-300 bg-green-100 p-4 dark:border-green-800 dark:bg-green-950/40">
+                                  <p className="text-sm font-medium text-muted-foreground">
+                                    Correct Answer
+                                  </p>
 
-                                <p className="mt-1 text-sm">
-                                  Correct answer:{' '}
-                                  <span className="font-semibold">
+                                  <p className="mt-1 font-semibold text-green-800 dark:text-green-300">
                                     {correctAnswer}.{' '}
                                     {
-                                      question
-                                        .options[
+                                      question.options[
                                         correctAnswer
                                       ]
                                     }
-                                  </span>
-                                </p>
+                                  </p>
+                                </div>
+                              )}
 
-                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -459,6 +493,7 @@ export default function QuizGeneratorPage() {
                   )}
                 </div>
 
+                {/* Take Another Quiz */}
                 <Button
                   onClick={startNewQuiz}
                   className="w-full"
@@ -470,8 +505,9 @@ export default function QuizGeneratorPage() {
               </div>
             )}
 
-            {/* QUIZ GENERATOR */}
-
+            {/* =========================
+                QUIZ GENERATOR
+            ========================== */}
             {!quizData && !results && (
               <div className="space-y-6">
 
