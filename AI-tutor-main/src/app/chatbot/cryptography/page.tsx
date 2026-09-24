@@ -169,16 +169,32 @@ export default function CryptographyChatbotPage() {
 
     setMessages((prev) => [...prev, modelMessage]);
 
-  } catch (error) {
-    console.error('Chatbot error:', error);
+ } catch (error: any) {
+  console.error('Chatbot error:', error);
 
-    const errorMessage: Message = {
-      role: 'model',
-      content: 'Sorry, I encountered an error. Please try again.',
-    };
+  const errorText = String(
+    error?.message || error || ''
+  ).toLowerCase();
 
-    setMessages((prev) => [...prev, errorMessage]);
-  } finally {
+  let message =
+    'I’m having trouble connecting right now. Please try again in a moment.';
+
+  if (
+    errorText.includes('429') ||
+    errorText.includes('quota') ||
+    errorText.includes('too many requests')
+  ) {
+    message =
+      'The AI service has temporarily reached its usage limit. Please try again later.';
+  }
+
+  const errorMessage: Message = {
+    role: 'model',
+    content: message,
+  };
+
+  setMessages((prev) => [...prev, errorMessage]);
+} finally {
     setIsLoading(false);
   }
 }
