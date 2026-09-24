@@ -1,44 +1,48 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  orderBy,
+} from 'firebase/firestore';
+
+import { useUser, useFirestore } from '@/firebase';
+
 import { Header } from '@/components/layout/header';
+
 import { Button } from '@/components/ui/button';
+
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from '@/components/ui/card';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { generateQuiz } from './actions';
 
 import {
   CheckCircle,
   XCircle,
-  Trophy,
   History,
-  Clock,
-  Target,
+  Trophy,
   RotateCcw,
+  ArrowLeft,
 } from 'lucide-react';
 
-import {
-  collection,
-  doc,
-  query,
-  orderBy,
-  setDoc,
-} from 'firebase/firestore';
+import { generateQuiz } from './actions';
 
-import {
-  useUser,
-  useFirestore,
-  useCollection,
-  useMemoFirebase,
-} from '@/firebase';
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type Question = {
   id: number;
@@ -49,803 +53,1301 @@ type Question = {
 type QuizData = {
   questions: Question[];
   answer_key: Record<string, string>;
+  cycleReset?: boolean;
 };
 
 type UserAnswers = Record<string, string>;
+
+type QuestionReview = {
+  id: number;
+  question: string;
+  options: Record<string, string>;
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+};
 
 type QuizAttempt = {
   id: string;
   score: number;
   total: number;
   percentage: number;
-  attemptedQuestionIds: number[];
+  questionIds: number[];
+  answers: UserAnswers;
+  review: QuestionReview[];
+  feedbackTitle: string;
+  feedbackMessage: string;
   completedAt: string;
 };
 
+
+/* =========================================================
+   FEEDBACK
+========================================================= */
+
+function getFeedback(percentage: number) {
+  if (percentage >= 90) {
+    return {
+      title: 'Excellent Work!',
+      message:
+        'Excellent performance. You have a strong understanding of these concepts.',
+    };
+  }
+
+  if (percentage >= 75) {
+    return {
+      title: 'Great Job!',
+      message:
+        'Good performance. You understand most of the concepts, with only a few areas to revise.',
+    };
+  }
+
+  if (percentage >= 60) {
+    return {
+      title: 'Good Effort!',
+      message:
+        'You have a basic understanding. Review the incorrect answers and try another quiz.',
+    };
+  }
+
+  return {
+    title: 'Keep Practicing!',
+    message:
+      'Do not worry. Review the concepts behind your incorrect answers and take another quiz.',
+  };
+}
+
+
+/* =========================================================
+   DATE FORMAT
+========================================================= */
+
+function formatDate(dateString: string) {
+  try {
+    return new Date(dateString).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return 'Unknown date';
+  }
+}
+
+
+/* =========================================================
+   PAGE
+========================================================= */
+
 export default function QuizGeneratorPage() {
-  const { user, isUserLoading } = useUser();
-  const firestore = useFirestore();
 
-  const [quizData, setQuizData] = useState<QuizData | null>(null);
-
-  const [results, setResults] = useState<{
-    score: number;
-    total: number;
-    userAnswers: UserAnswers;
-  } | null>(null);
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [numQuestions, setNumQuestions] = useState(5);
-
-  const [hasMounted, setHasMounted] = useState(false);
-
-  const { register, handleSubmit, reset } = useForm<UserAnswers>();
-
-  /*
-   * -------------------------------------------------------
-   * FIRESTORE QUIZ HISTORY
-   * -------------------------------------------------------
-   */
-
-  const quizHistoryQuery = useMemoFirebase(() => {
-    if (!user) return null;
-
-    return query(
-      collection(
-        firestore,
-        'users',
-        user.uid,
-        'quizAttempts'
-      ),
-      orderBy('completedAt', 'desc')
-    );
-  }, [firestore, user]);
+  const router = useRouter();
 
   const {
-    data: quizHistory,
-    isLoading: isHistoryLoading,
-  } = useCollection<QuizAttempt>(quizHistoryQuery);
+    user,
+    isUserLoading,
+  } = useUser();
 
-  /*
-   * Convert history into question IDs.
-   *
-   * This is used to tell the quiz generator which questions
-   * have already been attempted.
-   */
+  const firestore = useFirestore();
 
-  const attemptedIds = useMemo(() => {
-    if (!quizHistory) return [];
 
-    const ids = quizHistory.flatMap(
-      (attempt) =>
-        attempt.attemptedQuestionIds || []
-    );
+  /* -------------------------------------------------------
+     STATE
+  ------------------------------------------------------- */
 
-    return [...new Set(ids)];
-  }, [quizHistory]);
+  const [quizData, setQuizData] =
+    useState<QuizData | null>(null);
+
+  const [results, setResults] =
+    useState<{
+      score: number;
+      total: number;
+      percentage: number;
+      userAnswers: UserAnswers;
+    } | null>(null);
+
+  const [attempts, setAttempts] =
+    useState<QuizAttempt[]>([]);
+
+  const [selectedAttempt, setSelectedAttempt] =
+    useState<QuizAttempt | null>(null);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const [historyLoading, setHistoryLoading] =
+    useState(false);
+
+  const [numQuestions, setNumQuestions] =
+    useState(5);
+
+  const [errorMessage, setErrorMessage] =
+    useState('');
+
+
+  /* =========================================================
+     AUTH
+  ========================================================= */
 
   useEffect(() => {
-    setHasMounted(true);
-  }, []);
 
-  /*
-   * -------------------------------------------------------
-   * GENERATE QUIZ
-   * -------------------------------------------------------
-   */
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
 
-  const handleGenerateQuiz = async () => {
-    if (!user) return;
+  }, [
+    user,
+    isUserLoading,
+    router,
+  ]);
 
-    setIsLoading(true);
 
-    setQuizData(null);
-    setResults(null);
-    reset();
+  /* =========================================================
+     LOAD PREVIOUS QUIZ RESULTS
+  ========================================================= */
 
-    const formData = new FormData();
+  useEffect(() => {
 
-    formData.append(
-      'num',
-      numQuestions.toString()
-    );
+    if (!user || !firestore) {
+      return;
+    }
 
-    /*
-     * Send previously attempted questions
-     * to the server.
-     */
-    formData.append(
-      'attemptedIds',
-      attemptedIds.join(',')
-    );
+    let cancelled = false;
+
+    async function loadAttempts() {
+
+      try {
+
+        setHistoryLoading(true);
+        setErrorMessage('');
+
+        const attemptsRef = collection(
+          firestore,
+          'users',
+          user.uid,
+          'quizAttempts'
+        );
+
+        const attemptsQuery = query(
+          attemptsRef,
+          orderBy('completedAt', 'desc')
+        );
+
+        const snapshot =
+          await getDocs(attemptsQuery);
+
+        if (cancelled) {
+          return;
+        }
+
+        const loadedAttempts: QuizAttempt[] =
+          snapshot.docs.map((doc) => {
+
+            const data =
+              doc.data() as Omit<
+                QuizAttempt,
+                'id'
+              >;
+
+            return {
+              id: doc.id,
+              ...data,
+            };
+
+          });
+
+        setAttempts(
+          loadedAttempts
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Unable to load quiz history:',
+          error
+        );
+
+        if (!cancelled) {
+
+          /*
+           * Do NOT crash the page if Firestore
+           * history has a problem.
+           */
+
+          setAttempts([]);
+
+        }
+
+      } finally {
+
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+
+      }
+
+    }
+
+    loadAttempts();
+
+    return () => {
+      cancelled = true;
+    };
+
+  }, [
+    user,
+    firestore,
+  ]);
+
+
+  /* =========================================================
+     GET ALL PREVIOUSLY ATTEMPTED QUESTION IDS
+  ========================================================= */
+
+  function getAttemptedQuestionIds() {
+
+    const ids = new Set<number>();
+
+    attempts.forEach((attempt) => {
+
+      if (
+        Array.isArray(
+          attempt.questionIds
+        )
+      ) {
+
+        attempt.questionIds.forEach(
+          (id) => {
+            if (
+              typeof id === 'number'
+            ) {
+              ids.add(id);
+            }
+          }
+        );
+
+      }
+
+    });
+
+    return Array.from(ids);
+
+  }
+
+
+  /* =========================================================
+     GENERATE QUIZ
+  ========================================================= */
+
+  async function handleGenerateQuiz() {
+
+    if (!user) {
+      return;
+    }
 
     try {
-      const data = await generateQuiz(formData);
 
-      if ('error' in data) {
-        alert(data.error);
-      } else {
-        setQuizData(data);
+      setIsLoading(true);
+      setErrorMessage('');
+
+      setQuizData(null);
+      setResults(null);
+      setSelectedAttempt(null);
+
+
+      const attemptedIds =
+        getAttemptedQuestionIds();
+
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        'num',
+        String(numQuestions)
+      );
+
+      formData.append(
+        'attemptedIds',
+        attemptedIds.join(',')
+      );
+
+
+      const generatedQuiz =
+        await generateQuiz(formData);
+
+
+      if (
+        !generatedQuiz ||
+        !generatedQuiz.questions ||
+        generatedQuiz.questions.length === 0
+      ) {
+
+        throw new Error(
+          'No quiz questions were generated.'
+        );
+
       }
+
+
+      setQuizData(
+        generatedQuiz
+      );
+
     } catch (error) {
+
       console.error(
-        'Quiz generation error:',
+        'Quiz generation failed:',
         error
       );
 
-      alert(
-        'Something went wrong while generating the quiz. Please try again.'
+      setErrorMessage(
+        'Unable to generate the quiz right now. Please try again.'
       );
+
     } finally {
+
       setIsLoading(false);
+
     }
-  };
 
-  /*
-   * -------------------------------------------------------
-   * SUBMIT QUIZ
-   * -------------------------------------------------------
-   */
+  }
 
-  const onSubmitQuiz = async (
-    data: UserAnswers
-  ) => {
-    if (!quizData || !user) return;
+
+  /* =========================================================
+     SUBMIT QUIZ
+  ========================================================= */
+
+  async function handleSubmitQuiz(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+
+    event.preventDefault();
+
+    if (
+      !quizData ||
+      !user
+    ) {
+      return;
+    }
+
+
+    const form =
+      new FormData(event.currentTarget);
+
+
+    const userAnswers: UserAnswers = {};
+
+
+    quizData.questions.forEach(
+      (question) => {
+
+        const answer =
+          form.get(
+            `question-${question.id}`
+          );
+
+        userAnswers[
+          String(question.id)
+        ] =
+          answer
+            ? String(answer)
+            : '';
+
+      }
+    );
+
+
+    /* -------------------------------------------------------
+       CALCULATE SCORE
+    ------------------------------------------------------- */
 
     let score = 0;
 
-    for (const question of quizData.questions) {
-      if (
-        data[question.id.toString()] ===
-        quizData.answer_key[
-          question.id.toString()
-        ]
-      ) {
-        score++;
-      }
-    }
+    const review: QuestionReview[] =
+      quizData.questions.map(
+        (question) => {
+
+          const userAnswer =
+            userAnswers[
+              String(question.id)
+            ] || '';
+
+          const correctAnswer =
+            quizData.answer_key[
+              String(question.id)
+            ] || '';
+
+          const isCorrect =
+            userAnswer ===
+            correctAnswer;
+
+          if (isCorrect) {
+            score++;
+          }
+
+          return {
+            id: question.id,
+            question:
+              question.question,
+            options:
+              question.options,
+            userAnswer,
+            correctAnswer,
+            isCorrect,
+          };
+
+        }
+      );
+
 
     const total =
       quizData.questions.length;
 
-    const percentage = Math.round(
-      (score / total) * 100
-    );
-
-    /*
-     * Question IDs used in this quiz.
-     */
-    const currentQuizIds =
-      quizData.questions.map(
-        (question) => question.id
+    const percentage =
+      Math.round(
+        (score / total) * 100
       );
 
-    /*
-     * Create a unique attempt document.
-     */
-    const attemptRef = doc(
-      collection(
-        firestore,
-        'users',
-        user.uid,
-        'quizAttempts'
-      )
-    );
 
-    const attempt: QuizAttempt = {
-      id: attemptRef.id,
-      score,
-      total,
-      percentage,
-      attemptedQuestionIds:
-        currentQuizIds,
-      completedAt:
-        new Date().toISOString(),
-    };
+    const feedback =
+      getFeedback(percentage);
 
-    /*
-     * Save result permanently.
-     */
-    try {
-      await setDoc(
-        attemptRef,
-        attempt
-      );
-
-      console.log(
-        'Quiz attempt saved successfully.'
-      );
-    } catch (error) {
-      console.error(
-        'Failed to save quiz attempt:',
-        error
-      );
-    }
 
     setResults({
       score,
       total,
-      userAnswers: data,
+      percentage,
+      userAnswers,
     });
-  };
 
-  /*
-   * -------------------------------------------------------
-   * FEEDBACK
-   * -------------------------------------------------------
-   */
 
-  const getFeedback = (
-    percentage: number
-  ) => {
-    if (percentage >= 90) {
-      return {
-        title: 'Excellent performance!',
-        message:
-          'Outstanding work. You have a strong understanding of the topic.',
-      };
+    /* -------------------------------------------------------
+       SAVE RESULT TO FIRESTORE
+    ------------------------------------------------------- */
+
+    try {
+
+      setIsSaving(true);
+
+      const attemptsRef =
+        collection(
+          firestore,
+          'users',
+          user.uid,
+          'quizAttempts'
+        );
+
+
+      await addDoc(
+        attemptsRef,
+        {
+          score,
+          total,
+          percentage,
+
+          questionIds:
+            quizData.questions.map(
+              (question) =>
+                question.id
+            ),
+
+          answers:
+            userAnswers,
+
+          review,
+
+          feedbackTitle:
+            feedback.title,
+
+          feedbackMessage:
+            feedback.message,
+
+          completedAt:
+            new Date().toISOString(),
+        }
+      );
+
+
+      /*
+       * Reload history after saving.
+       */
+
+      const updatedQuery =
+        query(
+          attemptsRef,
+          orderBy(
+            'completedAt',
+            'desc'
+          )
+        );
+
+      const updatedSnapshot =
+        await getDocs(updatedQuery);
+
+
+      const updatedAttempts:
+        QuizAttempt[] =
+        updatedSnapshot.docs.map(
+          (doc) => ({
+            id: doc.id,
+            ...(doc.data() as Omit<
+              QuizAttempt,
+              'id'
+            >),
+          })
+        );
+
+
+      setAttempts(
+        updatedAttempts
+      );
+
+    } catch (error) {
+
+      console.error(
+        'Unable to save quiz result:',
+        error
+      );
+
+      /*
+       * The score is still shown to the user.
+       * Only history saving failed.
+       */
+
+    } finally {
+
+      setIsSaving(false);
+
     }
 
-    if (percentage >= 75) {
-      return {
-        title: 'Great job!',
-        message:
-          'You have a good understanding. A little more revision can make you even stronger.',
-      };
-    }
+  }
 
-    if (percentage >= 50) {
-      return {
-        title: 'Good attempt!',
-        message:
-          'You have the basics. Review the incorrect answers and try another quiz.',
-      };
-    }
 
-    return {
-      title: 'Keep practicing!',
-      message:
-        'Review the topic carefully and attempt another quiz to improve your score.',
-    };
-  };
+  /* =========================================================
+     START NEW QUIZ
+  ========================================================= */
 
-  /*
-   * -------------------------------------------------------
-   * LOADING
-   * -------------------------------------------------------
-   */
+  function startNewQuiz() {
+
+    setQuizData(null);
+
+    setResults(null);
+
+    setSelectedAttempt(null);
+
+    setErrorMessage('');
+
+  }
+
+
+  /* =========================================================
+     SHOW LOADING
+  ========================================================= */
 
   if (
     isUserLoading ||
-    isHistoryLoading ||
-    !hasMounted
+    !user
   ) {
+
     return (
       <div className="flex min-h-screen items-center justify-center">
-        Loading...
+        <p className="text-muted-foreground">
+          Loading...
+        </p>
       </div>
     );
+
   }
 
-  /*
-   * -------------------------------------------------------
-   * UI
-   * -------------------------------------------------------
-   */
 
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
+  /* =========================================================
+     SELECTED OLD ATTEMPT
+  ========================================================= */
 
-      <main className="flex-1 container py-8">
-        <div className="max-w-5xl mx-auto space-y-6">
+  if (selectedAttempt) {
 
-          {/* ------------------------------------------------ */}
-          {/* PAGE HEADER */}
-          {/* ------------------------------------------------ */}
+    return (
+
+      <div className="min-h-screen">
+
+        <Header />
+
+        <main className="mx-auto max-w-5xl p-4 md:p-8">
+
+          <Button
+            variant="ghost"
+            onClick={() =>
+              setSelectedAttempt(null)
+            }
+            className="mb-4"
+          >
+
+            <ArrowLeft className="mr-2 h-4 w-4" />
+
+            Back to Quiz Generator
+
+          </Button>
+
 
           <Card>
+
             <CardHeader>
-              <CardTitle className="font-headline text-3xl flex items-center gap-2">
-                <Target className="h-7 w-7" />
-                Quiz Generator
-              </CardTitle>
 
-              <CardDescription>
-                Test your knowledge with personalized quizzes
-                and track your learning progress.
-              </CardDescription>
+              <div className="flex items-center justify-between gap-4">
+
+                <div>
+
+                  <CardTitle>
+                    Previous Quiz Result
+                  </CardTitle>
+
+                  <CardDescription>
+                    {formatDate(
+                      selectedAttempt.completedAt
+                    )}
+                  </CardDescription>
+
+                </div>
+
+
+                <Trophy className="h-8 w-8" />
+
+              </div>
+
             </CardHeader>
-          </Card>
 
-          {/* ------------------------------------------------ */}
-          {/* PREVIOUS ATTEMPTS */}
-          {/* ------------------------------------------------ */}
 
-          {!quizData && !results && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5" />
-                  Your Previous Attempts
-                </CardTitle>
+            <CardContent className="space-y-6">
 
-                <CardDescription>
-                  Review your previous quiz performance.
-                </CardDescription>
-              </CardHeader>
+              {/* SCORE */}
 
-              <CardContent>
-                {quizHistory &&
-                quizHistory.length > 0 ? (
-                  <div className="space-y-3">
+              <div className="grid gap-4 md:grid-cols-3">
 
-                    {quizHistory
-                      .slice(0, 5)
-                      .map((attempt) => {
+                <Card>
 
-                        const feedback =
-                          getFeedback(
-                            attempt.percentage
-                          );
-
-                        return (
-                          <div
-                            key={attempt.id}
-                            className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-xl border p-4"
-                          >
-
-                            <div className="flex items-center gap-4">
-
-                              <div className="rounded-full bg-primary/10 p-3">
-                                <Trophy className="h-5 w-5 text-primary" />
-                              </div>
-
-                              <div>
-                                <p className="font-semibold">
-                                  {attempt.score} /{' '}
-                                  {attempt.total}
-                                </p>
-
-                                <p className="text-sm text-muted-foreground">
-                                  {feedback.title}
-                                </p>
-                              </div>
-
-                            </div>
-
-                            <div className="flex items-center gap-5 text-sm">
-
-                              <div>
-                                <p className="text-muted-foreground">
-                                  Score
-                                </p>
-                                <p className="font-bold">
-                                  {attempt.percentage}%
-                                </p>
-                              </div>
-
-                              <div>
-                                <p className="text-muted-foreground">
-                                  Questions
-                                </p>
-                                <p className="font-medium">
-                                  {attempt.total}
-                                </p>
-                              </div>
-
-                              <div>
-                                <p className="text-muted-foreground">
-                                  Date
-                                </p>
-
-                                <p className="font-medium">
-                                  {new Date(
-                                    attempt.completedAt
-                                  ).toLocaleDateString()}
-                                </p>
-                              </div>
-
-                            </div>
-
-                          </div>
-                        );
-                      })}
-
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-
-                    <History className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-
-                    <p className="font-medium">
-                      No quiz attempts yet
-                    </p>
+                  <CardContent className="pt-6">
 
                     <p className="text-sm text-muted-foreground">
-                      Complete your first quiz and your
-                      result will appear here.
+                      Score
                     </p>
 
-                  </div>
+                    <p className="text-3xl font-bold">
+                      {selectedAttempt.score}/
+                      {selectedAttempt.total}
+                    </p>
+
+                  </CardContent>
+
+                </Card>
+
+
+                <Card>
+
+                  <CardContent className="pt-6">
+
+                    <p className="text-sm text-muted-foreground">
+                      Percentage
+                    </p>
+
+                    <p className="text-3xl font-bold">
+                      {selectedAttempt.percentage}%
+                    </p>
+
+                  </CardContent>
+
+                </Card>
+
+
+                <Card>
+
+                  <CardContent className="pt-6">
+
+                    <p className="text-sm text-muted-foreground">
+                      Questions
+                    </p>
+
+                    <p className="text-3xl font-bold">
+                      {selectedAttempt.total}
+                    </p>
+
+                  </CardContent>
+
+                </Card>
+
+              </div>
+
+
+              {/* FEEDBACK */}
+
+              <div className="rounded-lg border p-5">
+
+                <h3 className="text-lg font-semibold">
+                  {selectedAttempt.feedbackTitle}
+                </h3>
+
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {selectedAttempt.feedbackMessage}
+                </p>
+
+              </div>
+
+
+              {/* QUESTION REVIEW */}
+
+              <div className="space-y-4">
+
+                <h2 className="text-xl font-semibold">
+                  Question Review
+                </h2>
+
+
+                {selectedAttempt.review?.map(
+                  (item, index) => (
+
+                    <Card
+                      key={item.id}
+                    >
+
+                      <CardContent className="pt-6">
+
+                        <div className="flex gap-3">
+
+                          <div className="mt-1">
+
+                            {item.isCorrect ? (
+
+                              <CheckCircle className="h-5 w-5" />
+
+                            ) : (
+
+                              <XCircle className="h-5 w-5" />
+
+                            )}
+
+                          </div>
+
+
+                          <div className="flex-1">
+
+                            <p className="font-medium">
+
+                              {index + 1}.{' '}
+
+                              {item.question}
+
+                            </p>
+
+
+                            <p className="mt-3 text-sm">
+
+                              Your answer:{' '}
+
+                              <span className="font-semibold">
+
+                                {item.userAnswer
+                                  ? `${item.userAnswer}. ${
+                                      item.options[
+                                        item.userAnswer
+                                      ] || ''
+                                    }`
+                                  : 'Not answered'}
+
+                              </span>
+
+                            </p>
+
+
+                            <p className="mt-1 text-sm">
+
+                              Correct answer:{' '}
+
+                              <span className="font-semibold">
+
+                                {item.correctAnswer}.{' '}
+
+                                {
+                                  item.options[
+                                    item.correctAnswer
+                                  ]
+                                }
+
+                              </span>
+
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                      </CardContent>
+
+                    </Card>
+
+                  )
                 )}
-              </CardContent>
-            </Card>
-          )}
 
-          {/* ------------------------------------------------ */}
-          {/* QUIZ GENERATION */}
-          {/* ------------------------------------------------ */}
+              </div>
 
-          {!quizData && !results && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Start a New Quiz
-                </CardTitle>
 
-                <CardDescription>
-                  Choose how many questions you want to
-                  answer.
-                </CardDescription>
-              </CardHeader>
+              <Button
+                onClick={startNewQuiz}
+                className="w-full"
+              >
 
-              <CardContent>
+                <RotateCcw className="mr-2 h-4 w-4" />
 
-                <div className="flex flex-col items-center gap-5">
+                Take Another Quiz
 
-                  <div className="text-center">
-                    <Label htmlFor="num-questions">
+              </Button>
+
+            </CardContent>
+
+          </Card>
+
+        </main>
+
+      </div>
+
+    );
+
+  }
+
+
+  /* =========================================================
+     MAIN PAGE
+  ========================================================= */
+
+  return (
+
+    <div className="min-h-screen">
+
+      <Header />
+
+
+      <main className="mx-auto max-w-5xl p-4 md:p-8">
+
+        <Card>
+
+          <CardHeader>
+
+            <CardTitle>
+              Quiz Generator
+            </CardTitle>
+
+            <CardDescription>
+              Test your knowledge and track your progress.
+            </CardDescription>
+
+          </CardHeader>
+
+
+          <CardContent className="space-y-8">
+
+
+            {/* =================================================
+                ACTIVE QUIZ
+            ================================================= */}
+
+            {quizData && !results && (
+
+              <form
+                onSubmit={handleSubmitQuiz}
+                className="space-y-6"
+              >
+
+                <div className="rounded-lg border p-4">
+
+                  <p className="font-medium">
+                    Answer all questions
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Select the option you think is correct.
+                  </p>
+
+                </div>
+
+
+                {quizData.questions.map(
+                  (question, index) => (
+
+                    <Card key={question.id}>
+
+                      <CardContent className="pt-6">
+
+                        <p className="mb-4 font-semibold">
+
+                          {index + 1}.{' '}
+
+                          {question.question}
+
+                        </p>
+
+
+                        <div className="space-y-3">
+
+                          {Object.entries(
+                            question.options
+                          ).map(
+                            ([key, value]) => (
+
+                              <label
+                                key={key}
+                                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition hover:bg-muted"
+                              >
+
+                                <input
+                                  type="radio"
+                                  name={`question-${question.id}`}
+                                  value={key}
+                                />
+
+                                <span>
+
+                                  <strong>
+                                    {key}.
+                                  </strong>{' '}
+
+                                  {value}
+
+                                </span>
+
+                              </label>
+
+                            )
+                          )}
+
+                        </div>
+
+                      </CardContent>
+
+                    </Card>
+
+                  )
+                )}
+
+
+                <div className="flex gap-3">
+
+                  <Button
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex-1"
+                  >
+
+                    {isSaving
+                      ? 'Saving...'
+                      : 'Submit Quiz'}
+
+                  </Button>
+
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={startNewQuiz}
+                  >
+
+                    Cancel
+
+                  </Button>
+
+                </div>
+
+              </form>
+
+            )}
+
+
+            {/* =================================================
+                RESULT
+            ================================================= */}
+
+            {results && (
+
+              <div className="space-y-6">
+
+                <div className="text-center">
+
+                  <Trophy className="mx-auto mb-3 h-12 w-12" />
+
+                  <h2 className="text-3xl font-bold">
+                    {results.score}/{results.total}
+                  </h2>
+
+                  <p className="text-lg text-muted-foreground">
+                    {results.percentage}%
+                  </p>
+
+                </div>
+
+
+                <div className="rounded-lg border p-5">
+
+                  <h3 className="text-xl font-semibold">
+
+                    {
+                      getFeedback(
+                        results.percentage
+                      ).title
+                    }
+
+                  </h3>
+
+                  <p className="mt-2 text-muted-foreground">
+
+                    {
+                      getFeedback(
+                        results.percentage
+                      ).message
+                    }
+
+                  </p>
+
+                </div>
+
+
+                <div className="flex gap-3">
+
+                  <Button
+                    onClick={startNewQuiz}
+                    className="flex-1"
+                  >
+
+                    <RotateCcw className="mr-2 h-4 w-4" />
+
+                    Take Another Quiz
+
+                  </Button>
+
+                </div>
+
+              </div>
+
+            )}
+
+
+            {/* =================================================
+                GENERATE QUIZ
+            ================================================= */}
+
+            {!quizData &&
+              !results && (
+
+                <div className="space-y-6">
+
+                  <div className="rounded-lg border p-5">
+
+                    <Label htmlFor="numQuestions">
+
                       Number of Questions
+
                     </Label>
 
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Choose between 1 and 10 questions.
+
+                    <Input
+                      id="numQuestions"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={numQuestions}
+                      onChange={(event) => {
+
+                        const value =
+                          Number(
+                            event.target.value
+                          );
+
+                        if (
+                          value >= 1 &&
+                          value <= 10
+                        ) {
+
+                          setNumQuestions(
+                            value
+                          );
+
+                        }
+
+                      }}
+                      className="mt-2"
+                    />
+
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+
+                      You can generate between 1 and 10 questions.
+
                     </p>
+
                   </div>
 
-                  <Input
-                    id="num-questions"
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={numQuestions}
-                    onChange={(e) => {
-                      const value =
-                        Number(e.target.value);
 
-                      if (
-                        value >= 1 &&
-                        value <= 10
-                      ) {
-                        setNumQuestions(value);
-                      }
-                    }}
-                    className="w-24 text-center"
-                    disabled={isLoading}
-                  />
+                  {errorMessage && (
+
+                    <div className="rounded-lg border p-4">
+
+                      <p className="text-sm">
+                        {errorMessage}
+                      </p>
+
+                    </div>
+
+                  )}
+
 
                   <Button
                     onClick={
                       handleGenerateQuiz
                     }
                     disabled={isLoading}
-                    size="lg"
+                    className="w-full"
                   >
+
                     {isLoading
-                      ? 'Generating...'
+                      ? 'Generating Quiz...'
                       : 'Generate Quiz'}
+
                   </Button>
 
-                  {attemptedIds.length > 0 && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4" />
 
-                      {attemptedIds.length}{' '}
-                      question
-                      {attemptedIds.length !== 1
-                        ? 's'
-                        : ''}{' '}
-                      already attempted.
-                    </p>
-                  )}
+                  {/* =================================================
+                      PREVIOUS RESULTS
+                  ================================================= */}
 
-                </div>
+                  <div className="pt-4">
 
-              </CardContent>
-            </Card>
-          )}
+                    <div className="mb-4 flex items-center gap-2">
 
-          {/* ------------------------------------------------ */}
-          {/* QUESTIONS */}
-          {/* ------------------------------------------------ */}
+                      <History className="h-5 w-5" />
 
-          {quizData && !results && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Your Quiz
-                </CardTitle>
+                      <h2 className="text-xl font-semibold">
+                        Previous Quiz Results
+                      </h2>
 
-                <CardDescription>
-                  Answer all questions and submit when
-                  you are ready.
-                </CardDescription>
-              </CardHeader>
+                    </div>
 
-              <CardContent>
 
-                <form
-                  onSubmit={handleSubmit(
-                    onSubmitQuiz
-                  )}
-                >
+                    {historyLoading && (
 
-                  <div className="space-y-8">
+                      <div className="rounded-lg border p-5">
 
-                    {quizData.questions.map(
-                      (q, index) => (
-                        <div
-                          key={q.id}
-                          className="rounded-xl border p-5"
-                        >
+                        <p className="text-sm text-muted-foreground">
+                          Loading your quiz history...
+                        </p>
 
-                          <p className="font-semibold mb-4">
-                            {index + 1}.{' '}
-                            {q.question}
+                      </div>
+
+                    )}
+
+
+                    {!historyLoading &&
+                      attempts.length === 0 && (
+
+                        <div className="rounded-lg border p-6 text-center">
+
+                          <History className="mx-auto mb-3 h-8 w-8" />
+
+                          <p className="font-medium">
+                            No quiz attempts yet
                           </p>
 
-                          <fieldset className="space-y-3">
-
-                            {Object.entries(
-                              q.options
-                            ).map(
-                              ([key, value]) => (
-                                <label
-                                  key={key}
-                                  htmlFor={`${q.id}-${key}`}
-                                  className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50"
-                                >
-
-                                  <input
-                                    type="radio"
-                                    id={`${q.id}-${key}`}
-                                    value={key}
-                                    {...register(
-                                      q.id.toString(),
-                                      {
-                                        required: true,
-                                      }
-                                    )}
-                                  />
-
-                                  <span>
-                                    <strong>
-                                      {key}:
-                                    </strong>{' '}
-                                    {value}
-                                  </span>
-
-                                </label>
-                              )
-                            )}
-
-                          </fieldset>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Your completed quizzes will appear here.
+                          </p>
 
                         </div>
-                      )
-                    )}
 
-                  </div>
+                      )}
 
-                  <div className="flex justify-end mt-8">
-                    <Button
-                      type="submit"
-                      size="lg"
-                    >
-                      Submit Quiz
-                    </Button>
-                  </div>
 
-                </form>
+                    {!historyLoading &&
+                      attempts.length > 0 && (
 
-              </CardContent>
-            </Card>
-          )}
+                        <div className="space-y-3">
 
-          {/* ------------------------------------------------ */}
-          {/* RESULTS */}
-          {/* ------------------------------------------------ */}
+                          {attempts.map(
+                            (attempt) => (
 
-          {results && quizData && (
-            <Card>
-              <CardHeader className="text-center">
+                              <button
+                                key={attempt.id}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedAttempt(
+                                    attempt
+                                  )
+                                }
+                                className="w-full rounded-lg border p-4 text-left transition hover:bg-muted"
+                              >
 
-                <CardTitle className="text-3xl">
-                  Quiz Results
-                </CardTitle>
+                                <div className="flex items-center justify-between gap-4">
 
-                <CardDescription>
-                  Here is your performance summary.
-                </CardDescription>
+                                  <div>
 
-              </CardHeader>
+                                    <p className="font-semibold">
 
-              <CardContent>
+                                      {attempt.feedbackTitle}
 
-                <div className="text-center mb-8">
+                                    </p>
 
-                  <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-primary/10">
-                    <Trophy className="h-10 w-10 text-primary" />
-                  </div>
+                                    <p className="mt-1 text-sm text-muted-foreground">
 
-                  <p className="text-5xl font-bold">
-                    {results.score} /{' '}
-                    {results.total}
-                  </p>
-
-                  <p className="text-xl text-muted-foreground mt-2">
-                    {Math.round(
-                      (results.score /
-                        results.total) *
-                        100
-                    )}
-                    %
-                  </p>
-
-                </div>
-
-                {/* FEEDBACK */}
-
-                <div className="rounded-xl border bg-muted/30 p-5 mb-8 text-center">
-
-                  <h3 className="font-bold text-lg">
-                    {getFeedback(
-                      Math.round(
-                        (results.score /
-                          results.total) *
-                          100
-                      )
-                    ).title}
-                  </h3>
-
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {getFeedback(
-                      Math.round(
-                        (results.score /
-                          results.total) *
-                          100
-                      )
-                    ).message}
-                  </p>
-
-                </div>
-
-                {/* QUESTIONS */}
-
-                <div className="space-y-4">
-
-                  {quizData.questions.map(
-                    (q, index) => {
-
-                      const userAnswer =
-                        results.userAnswers[
-                          q.id.toString()
-                        ];
-
-                      const correctAnswer =
-                        quizData.answer_key[
-                          q.id.toString()
-                        ];
-
-                      const isCorrect =
-                        userAnswer ===
-                        correctAnswer;
-
-                      return (
-                        <div
-                          key={q.id}
-                          className={`p-5 rounded-xl border ${
-                            isCorrect
-                              ? 'bg-green-50 dark:bg-green-900/20'
-                              : 'bg-red-50 dark:bg-red-900/20'
-                          }`}
-                        >
-
-                          <div className="flex items-start gap-2 mb-3">
-
-                            {isCorrect ? (
-                              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                            ) : (
-                              <XCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                            )}
-
-                            <p className="font-semibold">
-                              {index + 1}.{' '}
-                              {q.question}
-                            </p>
-
-                          </div>
-
-                          <div className="space-y-2 text-sm">
-
-                            {Object.entries(
-                              q.options
-                            ).map(
-                              ([key, value]) => {
-
-                                const isUserAnswer =
-                                  userAnswer ===
-                                  key;
-
-                                const isCorrectAnswer =
-                                  correctAnswer ===
-                                  key;
-
-                                return (
-                                  <div
-                                    key={key}
-                                    className={`p-2 rounded ${
-                                      isCorrectAnswer
-                                        ? 'font-semibold'
-                                        : ''
-                                    }`}
-                                  >
-
-                                    {key}: {value}
-
-                                    {isCorrectAnswer && (
-                                      <span className="ml-2 text-green-600">
-                                        ✓ Correct answer
-                                      </span>
-                                    )}
-
-                                    {isUserAnswer &&
-                                      !isCorrect && (
-                                        <span className="ml-2 text-red-600">
-                                          ✗ Your answer
-                                        </span>
+                                      {formatDate(
+                                        attempt.completedAt
                                       )}
 
-                                  </div>
-                                );
-                              }
-                            )}
+                                    </p>
 
-                          </div>
+                                  </div>
+
+
+                                  <div className="text-right">
+
+                                    <p className="text-xl font-bold">
+
+                                      {attempt.score}/
+                                      {attempt.total}
+
+                                    </p>
+
+                                    <p className="text-sm text-muted-foreground">
+
+                                      {attempt.percentage}%
+
+                                    </p>
+
+                                  </div>
+
+                                </div>
+
+                              </button>
+
+                            )
+                          )}
 
                         </div>
-                      );
-                    }
-                  )}
+
+                      )}
+
+                  </div>
 
                 </div>
 
-                {/* ACTIONS */}
+              )}
 
-                <div className="flex justify-center mt-8">
+          </CardContent>
 
-                  <Button
-                    onClick={() => {
-                      setQuizData(null);
-                      setResults(null);
-                      reset();
-                    }}
-                    size="lg"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Take Another Quiz
-                  </Button>
+        </Card>
 
-                </div>
-
-              </CardContent>
-            </Card>
-          )}
-
-        </div>
       </main>
+
     </div>
+
   );
 }
