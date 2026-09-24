@@ -7,8 +7,6 @@ import {
   collection,
   addDoc,
   getDocs,
-  query,
-  orderBy,
 } from 'firebase/firestore';
 
 import { useUser, useFirestore } from '@/firebase';
@@ -38,11 +36,6 @@ import {
 } from 'lucide-react';
 
 import { generateQuiz } from './actions';
-
-
-/* =========================================================
-   TYPES
-========================================================= */
 
 type Question = {
   id: number;
@@ -80,11 +73,6 @@ type QuizAttempt = {
   completedAt: string;
 };
 
-
-/* =========================================================
-   FEEDBACK
-========================================================= */
-
 function getFeedback(percentage: number) {
   if (percentage >= 90) {
     return {
@@ -117,68 +105,45 @@ function getFeedback(percentage: number) {
   };
 }
 
-
-/* =========================================================
-   DATE FORMAT
-========================================================= */
-
 function formatDate(dateString: string) {
-  try {
-    return new Date(dateString).toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
     return 'Unknown date';
   }
+
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-
-/* =========================================================
-   PAGE
-========================================================= */
-
 export default function QuizGeneratorPage() {
-
   const router = useRouter();
 
-  const {
-    user,
-    isUserLoading,
-  } = useUser();
-
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
+  const [quizData, setQuizData] = useState<QuizData | null>(null);
 
-  /* -------------------------------------------------------
-     STATE
-  ------------------------------------------------------- */
+  const [results, setResults] = useState<{
+    score: number;
+    total: number;
+    percentage: number;
+    userAnswers: UserAnswers;
+  } | null>(null);
 
-  const [quizData, setQuizData] =
-    useState<QuizData | null>(null);
-
-  const [results, setResults] =
-    useState<{
-      score: number;
-      total: number;
-      percentage: number;
-      userAnswers: UserAnswers;
-    } | null>(null);
-
-  const [attempts, setAttempts] =
-    useState<QuizAttempt[]>([]);
+  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
 
   const [selectedAttempt, setSelectedAttempt] =
     useState<QuizAttempt | null>(null);
 
-  const [isLoading, setIsLoading] =
-    useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [isSaving, setIsSaving] =
-    useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [historyLoading, setHistoryLoading] =
     useState(false);
@@ -189,30 +154,28 @@ export default function QuizGeneratorPage() {
   const [errorMessage, setErrorMessage] =
     useState('');
 
+  const [historyError, setHistoryError] =
+    useState('');
 
-  /* =========================================================
-     AUTH
-  ========================================================= */
+  // ---------------------------------------------------------
+  // LOGIN CHECK
+  // ---------------------------------------------------------
 
   useEffect(() => {
-
     if (!isUserLoading && !user) {
       router.push('/login');
     }
-
   }, [
     user,
     isUserLoading,
     router,
   ]);
 
-
-  /* =========================================================
-     LOAD PREVIOUS QUIZ RESULTS
-  ========================================================= */
+  // ---------------------------------------------------------
+  // LOAD QUIZ HISTORY
+  // ---------------------------------------------------------
 
   useEffect(() => {
-
     if (!user || !firestore) {
       return;
     }
@@ -220,11 +183,9 @@ export default function QuizGeneratorPage() {
     let cancelled = false;
 
     async function loadAttempts() {
-
       try {
-
         setHistoryLoading(true);
-        setErrorMessage('');
+        setHistoryError('');
 
         const attemptsRef = collection(
           firestore,
@@ -233,13 +194,15 @@ export default function QuizGeneratorPage() {
           'quizAttempts'
         );
 
-        const attemptsQuery = query(
-          attemptsRef,
-          orderBy('completedAt', 'desc')
-        );
+        /*
+         * We intentionally do not use orderBy() here.
+         * This avoids problems with missing fields/indexes.
+         * We sort the results in JavaScript instead.
+         */
 
-        const snapshot =
-          await getDocs(attemptsQuery);
+        const snapshot = await getDocs(
+          attemptsRef
+        );
 
         if (cancelled) {
           return;
@@ -247,50 +210,89 @@ export default function QuizGeneratorPage() {
 
         const loadedAttempts: QuizAttempt[] =
           snapshot.docs.map((doc) => {
-
-            const data =
-              doc.data() as Omit<
-                QuizAttempt,
-                'id'
-              >;
+            const data = doc.data();
 
             return {
               id: doc.id,
-              ...data,
+              score:
+                typeof data.score === 'number'
+                  ? data.score
+                  : 0,
+              total:
+                typeof data.total === 'number'
+                  ? data.total
+                  : 0,
+              percentage:
+                typeof data.percentage === 'number'
+                  ? data.percentage
+                  : 0,
+              questionIds:
+                Array.isArray(data.questionIds)
+                  ? data.questionIds
+                  : [],
+              answers:
+                data.answers &&
+                typeof data.answers === 'object'
+                  ? data.answers
+                  : {},
+              review:
+                Array.isArray(data.review)
+                  ? data.review
+                  : [],
+              feedbackTitle:
+                typeof data.feedbackTitle ===
+                'string'
+                  ? data.feedbackTitle
+                  : 'Quiz Result',
+              feedbackMessage:
+                typeof data.feedbackMessage ===
+                'string'
+                  ? data.feedbackMessage
+                  : '',
+              completedAt:
+                typeof data.completedAt ===
+                'string'
+                  ? data.completedAt
+                  : '',
             };
-
           });
 
-        setAttempts(
-          loadedAttempts
+        loadedAttempts.sort((a, b) => {
+          const dateA = new Date(
+            a.completedAt
+          ).getTime();
+
+          const dateB = new Date(
+            b.completedAt
+          ).getTime();
+
+          return dateB - dateA;
+        });
+
+        setAttempts(loadedAttempts);
+
+        console.log(
+          'Quiz history loaded:',
+          loadedAttempts.length
         );
-
       } catch (error) {
-
         console.error(
           'Unable to load quiz history:',
           error
         );
 
         if (!cancelled) {
-
-          /*
-           * Do NOT crash the page if Firestore
-           * history has a problem.
-           */
-
           setAttempts([]);
 
+          setHistoryError(
+            'Unable to load your previous quiz results. Please check your Firestore rules and Firebase connection.'
+          );
         }
-
       } finally {
-
         if (!cancelled) {
           setHistoryLoading(false);
         }
-
       }
-
     }
 
     loadAttempts();
@@ -298,29 +300,21 @@ export default function QuizGeneratorPage() {
     return () => {
       cancelled = true;
     };
+  }, [user, firestore]);
 
-  }, [
-    user,
-    firestore,
-  ]);
-
-
-  /* =========================================================
-     GET ALL PREVIOUSLY ATTEMPTED QUESTION IDS
-  ========================================================= */
+  // ---------------------------------------------------------
+  // GET PREVIOUSLY ATTEMPTED QUESTION IDS
+  // ---------------------------------------------------------
 
   function getAttemptedQuestionIds() {
-
     const ids = new Set<number>();
 
     attempts.forEach((attempt) => {
-
       if (
         Array.isArray(
           attempt.questionIds
         )
       ) {
-
         attempt.questionIds.forEach(
           (id) => {
             if (
@@ -330,42 +324,32 @@ export default function QuizGeneratorPage() {
             }
           }
         );
-
       }
-
     });
 
     return Array.from(ids);
-
   }
 
-
-  /* =========================================================
-     GENERATE QUIZ
-  ========================================================= */
+  // ---------------------------------------------------------
+  // GENERATE QUIZ
+  // ---------------------------------------------------------
 
   async function handleGenerateQuiz() {
-
     if (!user) {
       return;
     }
 
     try {
-
       setIsLoading(true);
       setErrorMessage('');
-
       setQuizData(null);
       setResults(null);
       setSelectedAttempt(null);
 
-
       const attemptedIds =
         getAttemptedQuestionIds();
 
-
-      const formData =
-        new FormData();
+      const formData = new FormData();
 
       formData.append(
         'num',
@@ -377,30 +361,21 @@ export default function QuizGeneratorPage() {
         attemptedIds.join(',')
       );
 
-
       const generatedQuiz =
         await generateQuiz(formData);
-
 
       if (
         !generatedQuiz ||
         !generatedQuiz.questions ||
         generatedQuiz.questions.length === 0
       ) {
-
         throw new Error(
           'No quiz questions were generated.'
         );
-
       }
 
-
-      setQuizData(
-        generatedQuiz
-      );
-
+      setQuizData(generatedQuiz);
     } catch (error) {
-
       console.error(
         'Quiz generation failed:',
         error
@@ -409,70 +384,57 @@ export default function QuizGeneratorPage() {
       setErrorMessage(
         'Unable to generate the quiz right now. Please try again.'
       );
-
     } finally {
-
       setIsLoading(false);
-
     }
-
   }
 
-
-  /* =========================================================
-     SUBMIT QUIZ
-  ========================================================= */
+  // ---------------------------------------------------------
+  // SUBMIT QUIZ
+  // ---------------------------------------------------------
 
   async function handleSubmitQuiz(
     event: React.FormEvent<HTMLFormElement>
   ) {
-
     event.preventDefault();
 
-    if (
-      !quizData ||
-      !user
-    ) {
+    if (!quizData || !user) {
       return;
     }
 
+    if (!firestore) {
+      setErrorMessage(
+        'Database connection is not ready. Please refresh the page and try again.'
+      );
 
-    const form =
-      new FormData(event.currentTarget);
+      return;
+    }
 
+    const form = new FormData(
+      event.currentTarget
+    );
 
     const userAnswers: UserAnswers = {};
 
-
     quizData.questions.forEach(
       (question) => {
-
-        const answer =
-          form.get(
-            `question-${question.id}`
-          );
+        const answer = form.get(
+          `question-${question.id}`
+        );
 
         userAnswers[
           String(question.id)
-        ] =
-          answer
-            ? String(answer)
-            : '';
-
+        ] = answer
+          ? String(answer)
+          : '';
       }
     );
-
-
-    /* -------------------------------------------------------
-       CALCULATE SCORE
-    ------------------------------------------------------- */
 
     let score = 0;
 
     const review: QuestionReview[] =
       quizData.questions.map(
         (question) => {
-
           const userAnswer =
             userAnswers[
               String(question.id)
@@ -484,8 +446,7 @@ export default function QuizGeneratorPage() {
             ] || '';
 
           const isCorrect =
-            userAnswer ===
-            correctAnswer;
+            userAnswer === correctAnswer;
 
           if (isCorrect) {
             score++;
@@ -501,10 +462,8 @@ export default function QuizGeneratorPage() {
             correctAnswer,
             isCorrect,
           };
-
         }
       );
-
 
     const total =
       quizData.questions.length;
@@ -514,11 +473,10 @@ export default function QuizGeneratorPage() {
         (score / total) * 100
       );
 
-
     const feedback =
       getFeedback(percentage);
 
-
+    // Show result immediately
     setResults({
       score,
       total,
@@ -526,14 +484,13 @@ export default function QuizGeneratorPage() {
       userAnswers,
     });
 
-
-    /* -------------------------------------------------------
-       SAVE RESULT TO FIRESTORE
-    ------------------------------------------------------- */
+    // -------------------------------------------------------
+    // SAVE TO FIRESTORE
+    // -------------------------------------------------------
 
     try {
-
       setIsSaving(true);
+      setErrorMessage('');
 
       const attemptsRef =
         collection(
@@ -543,118 +500,116 @@ export default function QuizGeneratorPage() {
           'quizAttempts'
         );
 
+      const completedAt =
+        new Date().toISOString();
 
-      await addDoc(
-        attemptsRef,
-        {
-          score,
-          total,
-          percentage,
+      const attemptData = {
+        score,
+        total,
+        percentage,
 
-          questionIds:
-            quizData.questions.map(
-              (question) =>
-                question.id
-            ),
+        questionIds:
+          quizData.questions.map(
+            (question) =>
+              question.id
+          ),
 
-          answers:
-            userAnswers,
+        answers: userAnswers,
 
-          review,
+        review,
 
-          feedbackTitle:
-            feedback.title,
+        feedbackTitle:
+          feedback.title,
 
-          feedbackMessage:
-            feedback.message,
+        feedbackMessage:
+          feedback.message,
 
-          completedAt:
-            new Date().toISOString(),
-        }
+        completedAt,
+      };
+
+      console.log(
+        'Saving quiz attempt...',
+        attemptData
       );
 
-
-      /*
-       * Reload history after saving.
-       */
-
-      const updatedQuery =
-        query(
+      const savedDoc =
+        await addDoc(
           attemptsRef,
-          orderBy(
-            'completedAt',
-            'desc'
-          )
+          attemptData
         );
 
-      const updatedSnapshot =
-        await getDocs(updatedQuery);
+      console.log(
+        'Quiz attempt saved successfully:',
+        savedDoc.id
+      );
 
+      // -----------------------------------------------------
+      // IMPORTANT:
+      // Immediately add the new result to the UI.
+      // No second Firestore query is required.
+      // -----------------------------------------------------
 
-      const updatedAttempts:
-        QuizAttempt[] =
-        updatedSnapshot.docs.map(
-          (doc) => ({
-            id: doc.id,
-            ...(doc.data() as Omit<
-              QuizAttempt,
-              'id'
-            >),
-          })
-        );
+      const newAttempt: QuizAttempt = {
+        id: savedDoc.id,
+        score,
+        total,
+        percentage,
 
+        questionIds:
+          quizData.questions.map(
+            (question) =>
+              question.id
+          ),
+
+        answers: userAnswers,
+
+        review,
+
+        feedbackTitle:
+          feedback.title,
+
+        feedbackMessage:
+          feedback.message,
+
+        completedAt,
+      };
 
       setAttempts(
-        updatedAttempts
+        (previousAttempts) => [
+          newAttempt,
+          ...previousAttempts,
+        ]
       );
-
     } catch (error) {
-
       console.error(
         'Unable to save quiz result:',
         error
       );
 
-      /*
-       * The score is still shown to the user.
-       * Only history saving failed.
-       */
-
+      setErrorMessage(
+        'Your quiz result could not be saved. Please check your Firestore rules and Firebase configuration.'
+      );
     } finally {
-
       setIsSaving(false);
-
     }
-
   }
 
-
-  /* =========================================================
-     START NEW QUIZ
-  ========================================================= */
+  // ---------------------------------------------------------
+  // START NEW QUIZ
+  // ---------------------------------------------------------
 
   function startNewQuiz() {
-
     setQuizData(null);
-
     setResults(null);
-
     setSelectedAttempt(null);
-
     setErrorMessage('');
-
   }
 
+  // ---------------------------------------------------------
+  // LOADING
+  // ---------------------------------------------------------
 
-  /* =========================================================
-     SHOW LOADING
-  ========================================================= */
-
-  if (
-    isUserLoading ||
-    !user
-  ) {
-
+  if (isUserLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">
@@ -662,24 +617,18 @@ export default function QuizGeneratorPage() {
         </p>
       </div>
     );
-
   }
 
-
-  /* =========================================================
-     SELECTED OLD ATTEMPT
-  ========================================================= */
+  // ---------------------------------------------------------
+  // PREVIOUS ATTEMPT DETAILS
+  // ---------------------------------------------------------
 
   if (selectedAttempt) {
-
     return (
-
       <div className="min-h-screen">
-
         <Header />
 
         <main className="mx-auto max-w-5xl p-4 md:p-8">
-
           <Button
             variant="ghost"
             onClick={() =>
@@ -687,22 +636,14 @@ export default function QuizGeneratorPage() {
             }
             className="mb-4"
           >
-
             <ArrowLeft className="mr-2 h-4 w-4" />
-
             Back to Quiz Generator
-
           </Button>
 
-
           <Card>
-
             <CardHeader>
-
               <div className="flex items-center justify-between gap-4">
-
                 <div>
-
                   <CardTitle>
                     Previous Quiz Result
                   </CardTitle>
@@ -712,27 +653,16 @@ export default function QuizGeneratorPage() {
                       selectedAttempt.completedAt
                     )}
                   </CardDescription>
-
                 </div>
 
-
                 <Trophy className="h-8 w-8" />
-
               </div>
-
             </CardHeader>
 
-
             <CardContent className="space-y-6">
-
-              {/* SCORE */}
-
               <div className="grid gap-4 md:grid-cols-3">
-
                 <Card>
-
                   <CardContent className="pt-6">
-
                     <p className="text-sm text-muted-foreground">
                       Score
                     </p>
@@ -741,33 +671,26 @@ export default function QuizGeneratorPage() {
                       {selectedAttempt.score}/
                       {selectedAttempt.total}
                     </p>
-
                   </CardContent>
-
                 </Card>
 
-
                 <Card>
-
                   <CardContent className="pt-6">
-
                     <p className="text-sm text-muted-foreground">
                       Percentage
                     </p>
 
                     <p className="text-3xl font-bold">
-                      {selectedAttempt.percentage}%
+                      {
+                        selectedAttempt.percentage
+                      }
+                      %
                     </p>
-
                   </CardContent>
-
                 </Card>
 
-
                 <Card>
-
                   <CardContent className="pt-6">
-
                     <p className="text-sm text-muted-foreground">
                       Questions
                     </p>
@@ -775,81 +698,51 @@ export default function QuizGeneratorPage() {
                     <p className="text-3xl font-bold">
                       {selectedAttempt.total}
                     </p>
-
                   </CardContent>
-
                 </Card>
-
               </div>
 
-
-              {/* FEEDBACK */}
-
               <div className="rounded-lg border p-5">
-
                 <h3 className="text-lg font-semibold">
-                  {selectedAttempt.feedbackTitle}
+                  {
+                    selectedAttempt.feedbackTitle
+                  }
                 </h3>
 
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {selectedAttempt.feedbackMessage}
+                  {
+                    selectedAttempt.feedbackMessage
+                  }
                 </p>
-
               </div>
 
-
-              {/* QUESTION REVIEW */}
-
               <div className="space-y-4">
-
                 <h2 className="text-xl font-semibold">
                   Question Review
                 </h2>
 
-
                 {selectedAttempt.review?.map(
                   (item, index) => (
-
-                    <Card
-                      key={item.id}
-                    >
-
+                    <Card key={item.id}>
                       <CardContent className="pt-6">
-
                         <div className="flex gap-3">
-
                           <div className="mt-1">
-
                             {item.isCorrect ? (
-
                               <CheckCircle className="h-5 w-5" />
-
                             ) : (
-
                               <XCircle className="h-5 w-5" />
-
                             )}
-
                           </div>
 
-
                           <div className="flex-1">
-
                             <p className="font-medium">
-
                               {index + 1}.{' '}
-
                               {item.question}
-
                             </p>
 
-
                             <p className="mt-3 text-sm">
-
                               Your answer:{' '}
-
                               <span className="font-semibold">
-
                                 {item.userAnswer
                                   ? `${item.userAnswer}. ${
                                       item.options[
@@ -857,151 +750,104 @@ export default function QuizGeneratorPage() {
                                       ] || ''
                                     }`
                                   : 'Not answered'}
-
                               </span>
-
                             </p>
 
-
                             <p className="mt-1 text-sm">
-
                               Correct answer:{' '}
-
                               <span className="font-semibold">
-
-                                {item.correctAnswer}.{' '}
-
+                                {
+                                  item.correctAnswer
+                                }
+                                .{' '}
                                 {
                                   item.options[
                                     item.correctAnswer
                                   ]
                                 }
-
                               </span>
-
                             </p>
-
                           </div>
-
                         </div>
-
                       </CardContent>
-
                     </Card>
-
                   )
                 )}
-
               </div>
-
 
               <Button
                 onClick={startNewQuiz}
                 className="w-full"
               >
-
                 <RotateCcw className="mr-2 h-4 w-4" />
-
                 Take Another Quiz
-
               </Button>
-
             </CardContent>
-
           </Card>
-
         </main>
-
       </div>
-
     );
-
   }
 
-
-  /* =========================================================
-     MAIN PAGE
-  ========================================================= */
+  // ---------------------------------------------------------
+  // MAIN PAGE
+  // ---------------------------------------------------------
 
   return (
-
     <div className="min-h-screen">
-
       <Header />
 
-
       <main className="mx-auto max-w-5xl p-4 md:p-8">
-
         <Card>
-
           <CardHeader>
-
             <CardTitle>
               Quiz Generator
             </CardTitle>
 
             <CardDescription>
-              Test your knowledge and track your progress.
+              Test your knowledge and track your
+              progress.
             </CardDescription>
-
           </CardHeader>
-
 
           <CardContent className="space-y-8">
 
-
-            {/* =================================================
-                ACTIVE QUIZ
-            ================================================= */}
+            {/* QUIZ QUESTIONS */}
 
             {quizData && !results && (
-
               <form
                 onSubmit={handleSubmitQuiz}
                 className="space-y-6"
               >
-
                 <div className="rounded-lg border p-4">
-
                   <p className="font-medium">
                     Answer all questions
                   </p>
 
                   <p className="text-sm text-muted-foreground">
-                    Select the option you think is correct.
+                    Select the option you think is
+                    correct.
                   </p>
-
                 </div>
-
 
                 {quizData.questions.map(
                   (question, index) => (
-
                     <Card key={question.id}>
-
                       <CardContent className="pt-6">
-
                         <p className="mb-4 font-semibold">
-
                           {index + 1}.{' '}
-
                           {question.question}
-
                         </p>
 
-
                         <div className="space-y-3">
-
                           {Object.entries(
                             question.options
                           ).map(
                             ([key, value]) => (
-
                               <label
                                 key={key}
                                 className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition hover:bg-muted"
                               >
-
                                 <input
                                   type="radio"
                                   name={`question-${question.id}`}
@@ -1009,345 +855,261 @@ export default function QuizGeneratorPage() {
                                 />
 
                                 <span>
-
                                   <strong>
                                     {key}.
                                   </strong>{' '}
-
                                   {value}
-
                                 </span>
-
                               </label>
-
                             )
                           )}
-
                         </div>
-
                       </CardContent>
-
                     </Card>
-
                   )
                 )}
 
-
                 <div className="flex gap-3">
-
                   <Button
                     type="submit"
                     disabled={isSaving}
                     className="flex-1"
                   >
-
                     {isSaving
                       ? 'Saving...'
                       : 'Submit Quiz'}
-
                   </Button>
-
 
                   <Button
                     type="button"
                     variant="outline"
                     onClick={startNewQuiz}
                   >
-
                     Cancel
-
                   </Button>
-
                 </div>
-
               </form>
-
             )}
 
-
-            {/* =================================================
-                RESULT
-            ================================================= */}
+            {/* CURRENT RESULT */}
 
             {results && (
-
               <div className="space-y-6">
-
                 <div className="text-center">
-
                   <Trophy className="mx-auto mb-3 h-12 w-12" />
 
                   <h2 className="text-3xl font-bold">
-                    {results.score}/{results.total}
+                    {results.score}/
+                    {results.total}
                   </h2>
 
                   <p className="text-lg text-muted-foreground">
                     {results.percentage}%
                   </p>
-
                 </div>
 
-
                 <div className="rounded-lg border p-5">
-
                   <h3 className="text-xl font-semibold">
-
                     {
                       getFeedback(
                         results.percentage
                       ).title
                     }
-
                   </h3>
 
                   <p className="mt-2 text-muted-foreground">
-
                     {
                       getFeedback(
                         results.percentage
                       ).message
                     }
-
                   </p>
-
                 </div>
 
+                {errorMessage && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm">
+                      {errorMessage}
+                    </p>
+                  </div>
+                )}
 
-                <div className="flex gap-3">
-
-                  <Button
-                    onClick={startNewQuiz}
-                    className="flex-1"
-                  >
-
-                    <RotateCcw className="mr-2 h-4 w-4" />
-
-                    Take Another Quiz
-
-                  </Button>
-
-                </div>
-
+                <Button
+                  onClick={startNewQuiz}
+                  className="w-full"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Take Another Quiz
+                </Button>
               </div>
-
             )}
 
-
-            {/* =================================================
-                GENERATE QUIZ
-            ================================================= */}
-
-            {!quizData &&
-              !results && (
-
-                <div className="space-y-6">
-
-                  <div className="rounded-lg border p-5">
-
-                    <Label htmlFor="numQuestions">
-
-                      Number of Questions
-
-                    </Label>
-
-
-                    <Input
-                      id="numQuestions"
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={numQuestions}
-                      onChange={(event) => {
-
-                        const value =
-                          Number(
-                            event.target.value
-                          );
-
-                        if (
-                          value >= 1 &&
-                          value <= 10
-                        ) {
-
-                          setNumQuestions(
-                            value
-                          );
-
-                        }
-
-                      }}
-                      className="mt-2"
-                    />
-
-
-                    <p className="mt-2 text-xs text-muted-foreground">
-
-                      You can generate between 1 and 10 questions.
-
-                    </p>
-
-                  </div>
-
-
-                  {errorMessage && (
-
-                    <div className="rounded-lg border p-4">
-
-                      <p className="text-sm">
-                        {errorMessage}
-                      </p>
-
-                    </div>
-
-                  )}
-
-
-                  <Button
-                    onClick={
-                      handleGenerateQuiz
-                    }
-                    disabled={isLoading}
-                    className="w-full"
-                  >
-
-                    {isLoading
-                      ? 'Generating Quiz...'
-                      : 'Generate Quiz'}
-
-                  </Button>
-
-
-                  {/* =================================================
-                      PREVIOUS RESULTS
-                  ================================================= */}
-
-                  <div className="pt-4">
-
-                    <div className="mb-4 flex items-center gap-2">
-
-                      <History className="h-5 w-5" />
-
-                      <h2 className="text-xl font-semibold">
-                        Previous Quiz Results
-                      </h2>
-
-                    </div>
-
-
-                    {historyLoading && (
-
-                      <div className="rounded-lg border p-5">
-
-                        <p className="text-sm text-muted-foreground">
-                          Loading your quiz history...
-                        </p>
-
-                      </div>
-
-                    )}
-
-
-                    {!historyLoading &&
-                      attempts.length === 0 && (
-
-                        <div className="rounded-lg border p-6 text-center">
-
-                          <History className="mx-auto mb-3 h-8 w-8" />
-
-                          <p className="font-medium">
-                            No quiz attempts yet
-                          </p>
-
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Your completed quizzes will appear here.
-                          </p>
-
-                        </div>
-
-                      )}
-
-
-                    {!historyLoading &&
-                      attempts.length > 0 && (
-
-                        <div className="space-y-3">
-
-                          {attempts.map(
-                            (attempt) => (
-
-                              <button
-                                key={attempt.id}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedAttempt(
-                                    attempt
-                                  )
-                                }
-                                className="w-full rounded-lg border p-4 text-left transition hover:bg-muted"
-                              >
-
-                                <div className="flex items-center justify-between gap-4">
-
-                                  <div>
-
-                                    <p className="font-semibold">
-
-                                      {attempt.feedbackTitle}
-
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-muted-foreground">
-
-                                      {formatDate(
-                                        attempt.completedAt
-                                      )}
-
-                                    </p>
-
-                                  </div>
-
-
-                                  <div className="text-right">
-
-                                    <p className="text-xl font-bold">
-
-                                      {attempt.score}/
-                                      {attempt.total}
-
-                                    </p>
-
-                                    <p className="text-sm text-muted-foreground">
-
-                                      {attempt.percentage}%
-
-                                    </p>
-
-                                  </div>
-
-                                </div>
-
-                              </button>
-
-                            )
-                          )}
-
-                        </div>
-
-                      )}
-
-                  </div>
-
+            {/* GENERATOR + HISTORY */}
+
+            {!quizData && !results && (
+              <div className="space-y-6">
+
+                <div className="rounded-lg border p-5">
+                  <Label htmlFor="numQuestions">
+                    Number of Questions
+                  </Label>
+
+                  <Input
+                    id="numQuestions"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={numQuestions}
+                    onChange={(event) => {
+                      const value =
+                        Number(
+                          event.target.value
+                        );
+
+                      if (
+                        value >= 1 &&
+                        value <= 10
+                      ) {
+                        setNumQuestions(
+                          value
+                        );
+                      }
+                    }}
+                    className="mt-2"
+                  />
+
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    You can generate between 1
+                    and 10 questions.
+                  </p>
                 </div>
 
-              )}
+                {errorMessage && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm">
+                      {errorMessage}
+                    </p>
+                  </div>
+                )}
 
+                <Button
+                  onClick={
+                    handleGenerateQuiz
+                  }
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  {isLoading
+                    ? 'Generating Quiz...'
+                    : 'Generate Quiz'}
+                </Button>
+
+                {/* HISTORY */}
+
+                <div className="pt-4">
+                  <div className="mb-4 flex items-center gap-2">
+                    <History className="h-5 w-5" />
+
+                    <h2 className="text-xl font-semibold">
+                      Previous Quiz Results
+                    </h2>
+                  </div>
+
+                  {historyLoading && (
+                    <div className="rounded-lg border p-5">
+                      <p className="text-sm text-muted-foreground">
+                        Loading your quiz history...
+                      </p>
+                    </div>
+                  )}
+
+                  {historyError && (
+                    <div className="rounded-lg border p-5">
+                      <p className="text-sm">
+                        {historyError}
+                      </p>
+                    </div>
+                  )}
+
+                  {!historyLoading &&
+                    !historyError &&
+                    attempts.length === 0 && (
+                      <div className="rounded-lg border p-6 text-center">
+                        <History className="mx-auto mb-3 h-8 w-8" />
+
+                        <p className="font-medium">
+                          No quiz attempts yet
+                        </p>
+
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Your completed quizzes
+                          will appear here.
+                        </p>
+                      </div>
+                    )}
+
+                  {!historyLoading &&
+                    attempts.length > 0 && (
+                      <div className="space-y-3">
+                        {attempts.map(
+                          (attempt) => (
+                            <button
+                              key={
+                                attempt.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                setSelectedAttempt(
+                                  attempt
+                                )
+                              }
+                              className="w-full rounded-lg border p-4 text-left transition hover:bg-muted"
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="font-semibold">
+                                    {
+                                      attempt.feedbackTitle
+                                    }
+                                  </p>
+
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    {formatDate(
+                                      attempt.completedAt
+                                    )}
+                                  </p>
+                                </div>
+
+                                <div className="text-right">
+                                  <p className="text-xl font-bold">
+                                    {
+                                      attempt.score
+                                    }
+                                    /
+                                    {
+                                      attempt.total
+                                    }
+                                  </p>
+
+                                  <p className="text-sm text-muted-foreground">
+                                    {
+                                      attempt.percentage
+                                    }
+                                    %
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
           </CardContent>
-
         </Card>
-
       </main>
-
     </div>
-
   );
 }
